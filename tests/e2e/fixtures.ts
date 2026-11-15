@@ -64,8 +64,9 @@ export const savedState = (page: Page) =>
     const root = await navigator.storage.getDirectory()
     const folder = await root.getDirectoryHandle('photos')
     const handle = await folder.getFileHandle('.tgprep.json').catch(() => null)
-    if (!handle) return null
-    return JSON.parse(await (await handle.getFile()).text()) as {
+    const text = handle ? await (await handle.getFile()).text() : ''
+    if (text === '') return null
+    return JSON.parse(text) as {
       posts: { category: string; items: string[]; caption: string }[]
       photos: Record<string, { category: string | null; edits: { quarter: number } }>
     }
