@@ -6,7 +6,7 @@ use crate::store::{
     CategoryFilter, LibraryLayout, LibrarySort, Settings, ViewKey, clear_selection, commit,
     open_viewer, reveal_photo, store,
 };
-use crate::thumbs::display_thumb;
+use crate::thumbs::{display_thumb, read_ahead, require_thumb_short_side};
 use crate::tile::{Fit, TileProps, tile};
 use crate::ui::{Chip, Choice, IconButton, Label, PaneHeader, RangeInput, Segmented};
 use crate::virtual_list::{centered_offset, watch_viewport};
@@ -21,6 +21,8 @@ use web_sys::PointerEvent;
 const GAP_PX: f64 = 6.0;
 const LIST_ROW_REM: f64 = 3.5;
 const OVERSCAN: usize = 3;
+const READ_AHEAD_SCREENS_BELOW: usize = 8;
+const READ_AHEAD_SCREENS_ABOVE: usize = 2;
 
 fn update(change: impl FnOnce(&mut Settings)) {
     store().settings.update(change);
@@ -319,11 +321,11 @@ pub fn Library() -> impl IntoView {
     });
     #[expect(clippy::cast_precision_loss, reason = "row counts are small")]
     let total_height = move || GAP_PX + rows.get() as f64 * layout.get().3 + GAP_PX * 4.0;
-    let window = Memo::new(move |_| {
-        let (_, columns, _, row_size) = layout.get();
+    let shown_rows = Memo::new(move |_| {
+        let row_size = layout.get().3;
         let count = rows.get();
         if count == 0 || row_size <= 0.0 {
-            return Vec::new();
+            return 0..0;
         }
         let top = viewport.scroll_top.get() - GAP_PX;
         let bottom = top + viewport.height.get();
@@ -336,8 +338,12 @@ pub fn Library() -> impl IntoView {
             ((top / row_size).floor().max(0.0) as usize).min(count - 1),
             ((bottom / row_size).ceil().max(1.0) as usize - 1).min(count - 1),
         );
-        let range =
-            first.saturating_sub(OVERSCAN) * columns..((last + OVERSCAN + 1).min(count) * columns);
+        first.saturating_sub(OVERSCAN)..(last + OVERSCAN + 1).min(count)
+    });
+    let window = Memo::new(move |_| {
+        let columns = layout.get().1;
+        let rows = shown_rows.get();
+        let range = rows.start * columns..rows.end * columns;
         visible.with(|visible| {
             visible
                 .iter()
@@ -347,6 +353,24 @@ pub fn Library() -> impl IntoView {
                 .map(|(index, id)| (id.clone(), index))
                 .collect::<Vec<_>>()
         })
+    });
+    Effect::new(move |_| {
+        let shown = shown_rows.get();
+        let (_, columns, cell, _) = layout.get();
+        require_thumb_short_side(cell);
+        let screen = shown.len().saturating_sub(2 * OVERSCAN).max(1);
+        let below = shown.end..shown.end + READ_AHEAD_SCREENS_BELOW * screen;
+        let above = shown
+            .start
+            .saturating_sub(READ_AHEAD_SCREENS_ABOVE * screen)..shown.start;
+        let ids = visible.with(|visible| {
+            let row = |row: usize| visible.iter().skip(row * columns).take(columns).cloned();
+            below
+                .flat_map(row)
+                .chain(above.rev().flat_map(row))
+                .collect::<Vec<_>>()
+        });
+        read_ahead(&ids);
     });
     let positions: Memo<Arc<HashMap<PhotoId, usize>>> = Memo::new(move |_| {
         Arc::new(visible.with(|visible| {

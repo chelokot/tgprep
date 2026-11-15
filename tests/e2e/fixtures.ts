@@ -10,7 +10,7 @@ export const images = (count: number, width = 400, height = 300): TestImage[] =>
     color: `hsl(${index * 70}, 70%, 45%)`,
   }))
 
-export const openFolder = async (page: Page, files: TestImage[], state: unknown = null, thumbs = files.length) => {
+export const openFolder = async (page: Page, files: TestImage[], state: unknown = null, thumbs: number | null = files.length) => {
   await page.goto('/')
   await page.evaluate(async ([files, state]) => {
     const root = await navigator.storage.getDirectory()
@@ -36,7 +36,7 @@ export const openFolder = async (page: Page, files: TestImage[], state: unknown 
     window.showDirectoryPicker = async () => folder
   }, [files, state] as const)
   await page.getByRole('button', { name: 'Open folder' }).click()
-  await expect(library(page).locator('[data-photo] img')).toHaveCount(thumbs)
+  if (thumbs !== null) await expect(library(page).locator('[data-photo] img')).toHaveCount(thumbs)
 }
 
 export const library = (page: Page) => page.locator('[data-drop="library"]')

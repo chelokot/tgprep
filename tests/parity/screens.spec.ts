@@ -44,6 +44,7 @@ for (const viewport of [{ width: 1600, height: 1000 }, { width: 820, height: 118
       await shot(page, 'workspace')
 
       const target = await pointIn(posts(postsView(page, 0)).first().locator('[data-photo="b.jpg"]'), 0.8, 0.5)
+      await libraryTile(page, 'g.jpg').scrollIntoViewIfNeeded()
       const box = (await libraryTile(page, 'g.jpg').boundingBox())!
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
       await page.mouse.down()

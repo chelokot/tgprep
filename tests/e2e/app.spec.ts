@@ -133,3 +133,90 @@ test('send mode copies the rendered photo and the caption', async ({ page }) => 
   await expect(page.getByRole('status')).toHaveText('Caption copied')
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Hello **Telegram**')
 })
+
+test.describe('on a high density screen', () => {
+  test.use({ deviceScaleFactor: 2 })
+
+  test('thumbnails have enough pixels for the largest tiles', async ({ page }) => {
+    await openFolder(page, [
+      { name: 'a.jpg', width: 3000, height: 2000, color: 'hsl(20, 70%, 45%)' },
+      { name: 'b.jpg', width: 2000, height: 3000, color: 'hsl(200, 70%, 45%)' },
+    ])
+    await page.getByRole('slider', { name: 'Thumbnail size' }).fill('24')
+    await page.getByRole('slider', { name: 'Photo height' }).first().fill('20')
+    const view = postsView(page, 0)
+    await drag(page, libraryTile(page, 'a.jpg'), await pointIn(view, 0.5, 0.3))
+    await expect(posts(view).first().locator('[data-photo="a.jpg"] img')).toBeVisible()
+
+    const sharpness = () =>
+      page.locator('[data-photo] img').evaluateAll((images) =>
+        images.map((image) => {
+          const element = image as HTMLImageElement
+          return Math.min(element.naturalWidth / (element.clientWidth * devicePixelRatio), element.naturalHeight / (element.clientHeight * devicePixelRatio))
+        }),
+      )
+    await expect.poll(async () => (await sharpness()).length).toBe(4)
+    for (const ratio of await sharpness()) expect(ratio).toBeGreaterThanOrEqual(1)
+  })
+})
+
+test('prepares thumbnails of the photos below the screen before scrolling', async ({ page }) => {
+  const files = images(80)
+  await openFolder(page, files, null, null)
+  const cached = () =>
+    page.evaluate(
+      () =>
+        new Promise<number>((resolve) => {
+          const open = indexedDB.open('tgprep-thumbs')
+          open.onsuccess = () => {
+            const count = open.result.transaction('thumbs').objectStore('thumbs').count()
+            count.onsuccess = () => {
+              resolve(count.result)
+              open.result.close()
+            }
+          }
+        }),
+    )
+  await expect(library(page).locator('[data-photo] img').first()).toBeVisible()
+  await expect.poll(cached, { timeout: 20_000 }).toBe(files.length)
+  expect(await library(page).locator('[data-photo]').count()).toBeLessThan(files.length)
+})
+
+test('keeps making thumbnails after photos become unreadable', async ({ page }) => {
+  await page.addInitScript(() => {
+    const getFile = FileSystemFileHandle.prototype.getFile
+    const listed = new Set<string>()
+    FileSystemFileHandle.prototype.getFile = function (this: FileSystemFileHandle) {
+      if (/^[a-e]\.jpg$/.test(this.name) && listed.has(this.name)) return Promise.reject(new DOMException('gone', 'NotFoundError'))
+      listed.add(this.name)
+      return getFile.call(this)
+    }
+  })
+  await openFolder(page, images(10), null, 5)
+  await expect(library(page).locator('[data-photo]:not(:has(img))')).toHaveCount(5)
+  await expect(library(page).locator('[data-photo] .animate-pulse')).toHaveCount(0)
+})
+
+test.describe('on a tablet', () => {
+  test.use({ viewport: { width: 820, height: 1180 } })
+
+  test('pressing and dragging a photo over text selects none of it', async ({ page }) => {
+    const state = {
+      app: 'tgprep',
+      version: 1,
+      categories: [{ id: 'friends', name: 'Друзьям', color: '#3390ec' }],
+      posts: [{ id: 'p1', category: 'friends', items: ['a.jpg', 'b.jpg', 'c.jpg'], caption: 'Weekend in the hills', sent: false }],
+      photos: {},
+    }
+    await openFolder(page, images(8, 1200, 800), state, 7)
+    const target = await pointIn(posts(postsView(page, 0)).first().locator('[data-photo="b.jpg"]'), 0.8, 0.5)
+    const box = (await libraryTile(page, 'a.jpg').boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 + 3, box.y + box.height / 2 + 3)
+    await page.mouse.move(target.x, target.y, { steps: 12 })
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    expect(await page.evaluate(() => getSelection()!.toString())).toBe('')
+  })
+})

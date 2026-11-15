@@ -17,7 +17,8 @@ use web_sys::{
     WorkerOptions, WorkerType,
 };
 
-const THUMB_LONG_SIDE: f64 = 720.0;
+const SHORT_TO_LONG_SIDE: f64 = 1.5;
+const THUMB_SIDE_STEP: f64 = 256.0;
 const EDITED_DELAY_MS: i32 = 250;
 const EDITED_QUALITY: f64 = 0.85;
 
@@ -39,9 +40,24 @@ pub struct DisplayThumb {
 struct Pool {
     idle: Vec<Worker>,
     queue: Vec<Rc<PhotoFile>>,
+    ahead: Vec<Rc<PhotoFile>>,
+    ahead_rank: HashMap<PhotoId, usize>,
+    promoted: HashSet<PhotoId>,
     in_flight: HashMap<String, (PhotoId, Worker, u32)>,
     requested: HashSet<PhotoId>,
     generation: u32,
+}
+
+impl Pool {
+    fn nearest_ahead(&mut self) -> Option<Rc<PhotoFile>> {
+        let position = self
+            .ahead
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, file)| self.ahead_rank.get(&file.id))
+            .map(|(position, _)| position)?;
+        Some(self.ahead.swap_remove(position))
+    }
 }
 
 struct Pending {
@@ -58,6 +74,7 @@ thread_local! {
     static EDITED: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
     static RENDERER: RefCell<Option<Renderer>> = const { RefCell::new(None) };
     static RENDERING: Rc<Serial> = Rc::new(Serial::default());
+    static THUMB_SIDE: ArcRwSignal<f64> = ArcRwSignal::new(0.0);
 }
 
 pub fn spawn_worker(on_message: impl Fn(&Worker, Response) + 'static) -> Option<Worker> {
@@ -80,8 +97,29 @@ pub fn spawn_worker(on_message: impl Fn(&Worker, Response) + 'static) -> Option<
     Some(worker)
 }
 
-fn cache_key(file: &PhotoFile) -> String {
-    format!("{}|{}|{}", file.id, file.size, file.last_modified)
+fn thumb_long_side() -> f64 {
+    THUMB_SIDE.with(|side| side.get_untracked())
+}
+
+pub fn require_thumb_short_side(css_pixels: f64) {
+    let device = css_pixels * SHORT_TO_LONG_SIDE * window().device_pixel_ratio();
+    let side = (device / THUMB_SIDE_STEP).ceil().max(2.0) * THUMB_SIDE_STEP;
+    THUMB_SIDE.with(|current| {
+        if side > current.get_untracked() {
+            POOL.with_borrow_mut(|pool| {
+                pool.requested = pool.ahead.iter().map(|file| file.id.clone()).collect();
+                pool.promoted.clear();
+            });
+            current.set(side);
+        }
+    });
+}
+
+fn cache_key(file: &PhotoFile, long_side: f64) -> String {
+    format!(
+        "{}|{}|{}|{long_side}",
+        file.id, file.size, file.last_modified
+    )
 }
 
 fn signal(id: &PhotoId) -> ArcRwSignal<Option<Thumb>> {
@@ -153,32 +191,42 @@ fn cache_entry(thumbnail: &Thumbnail) -> JsValue {
 fn pump() {
     loop {
         let next = POOL.with_borrow_mut(|pool| {
-            if pool.idle.is_empty() || pool.queue.is_empty() {
+            if pool.idle.is_empty() {
                 return None;
             }
-            let file = pool.queue.pop()?;
+            let file = pool.queue.pop().or_else(|| pool.nearest_ahead())?;
             let worker = pool.idle.pop()?;
-            let key = cache_key(&file);
+            let long_side = thumb_long_side();
+            let key = cache_key(&file, long_side);
             pool.in_flight.insert(
                 key.clone(),
                 (file.id.clone(), worker.clone(), pool.generation),
             );
-            Some((file, worker, key))
+            Some((file, worker, key, long_side))
         });
-        let Some((file, worker, key)) = next else {
+        let Some((file, worker, key, long_side)) = next else {
             return;
         };
         spawn_local(async move {
-            if let Ok(data) = wait::<File>(file.handle.get_file()).await {
-                let _ = worker.post_message(
-                    &Request {
-                        job: Job::Thumb,
+            match wait::<File>(file.handle.get_file()).await {
+                Ok(data) => {
+                    let _ = worker.post_message(
+                        &Request {
+                            job: Job::Thumb,
+                            key,
+                            file: data,
+                            long_side,
+                        }
+                        .to_js(),
+                    );
+                }
+                Err(_) => received(
+                    &worker,
+                    Response::Thumb {
                         key,
-                        file: data,
-                        long_side: THUMB_LONG_SIDE,
-                    }
-                    .to_js(),
-                );
+                        thumbnail: None,
+                    },
+                ),
             }
         });
     }
@@ -220,14 +268,37 @@ pub fn start_workers() {
     }
 }
 
-fn request_thumb(file: Rc<PhotoFile>) {
-    if !POOL.with_borrow_mut(|pool| pool.requested.insert(file.id.clone())) {
+#[derive(Clone, Copy)]
+enum Priority {
+    Shown,
+    Ahead,
+}
+
+fn request_thumb(file: Rc<PhotoFile>, priority: Priority) {
+    let requested = POOL.with_borrow_mut(|pool| {
+        if pool.requested.insert(file.id.clone()) {
+            return true;
+        }
+        if let Priority::Shown = priority {
+            match pool.ahead.iter().position(|waiting| waiting.id == file.id) {
+                Some(position) => {
+                    let promoted = pool.ahead.swap_remove(position);
+                    pool.queue.push(promoted);
+                }
+                None => {
+                    pool.promoted.insert(file.id.clone());
+                }
+            }
+        }
+        false
+    });
+    if !requested {
         return;
     }
     spawn_local(async move {
         let cached = CACHE
             .with(Clone::clone)
-            .get(&cache_key(&file))
+            .get(&cache_key(&file, thumb_long_side()))
             .await
             .ok()
             .and_then(|value| cached_thumbnail(&value));
@@ -235,15 +306,59 @@ fn request_thumb(file: Rc<PhotoFile>) {
             store_thumb(file.id.clone(), Some(&thumbnail));
             return;
         }
-        POOL.with_borrow_mut(|pool| pool.queue.push(file));
+        POOL.with_borrow_mut(|pool| {
+            let promoted = pool.promoted.remove(&file.id);
+            match priority {
+                Priority::Ahead if !promoted => {
+                    if pool.ahead_rank.contains_key(&file.id) {
+                        pool.ahead.push(file);
+                    } else {
+                        pool.requested.remove(&file.id);
+                    }
+                }
+                _ => pool.queue.push(file),
+            }
+        });
         pump();
     });
+}
+
+pub fn read_ahead(ids: &[PhotoId]) {
+    let Some(files) = store().library.with_untracked(|library| {
+        library.as_ref().map(|library| {
+            ids.iter()
+                .filter_map(|id| library.by_id.get(id).cloned())
+                .collect::<Vec<_>>()
+        })
+    }) else {
+        return;
+    };
+    POOL.with_borrow_mut(|pool| {
+        pool.ahead_rank = ids
+            .iter()
+            .enumerate()
+            .map(|(rank, id)| (id.clone(), rank))
+            .collect();
+        let (kept, dropped): (Vec<_>, Vec<_>) = std::mem::take(&mut pool.ahead)
+            .into_iter()
+            .partition(|file| pool.ahead_rank.contains_key(&file.id));
+        for file in dropped {
+            pool.requested.remove(&file.id);
+        }
+        pool.ahead = kept;
+    });
+    for file in files {
+        request_thumb(file, Priority::Ahead);
+    }
 }
 
 pub fn reset_thumbs() {
     POOL.with_borrow_mut(|pool| {
         pool.requested.clear();
         pool.queue.clear();
+        pool.ahead.clear();
+        pool.ahead_rank.clear();
+        pool.promoted.clear();
         pool.generation += 1;
     });
     THUMBS.with_borrow_mut(HashMap::clear);
@@ -256,8 +371,10 @@ pub fn base_thumb(id: &PhotoId) -> ArcRwSignal<Option<Thumb>> {
             .as_ref()
             .and_then(|library| library.by_id.get(id).cloned())
     });
-    if let Some(file) = file {
-        request_thumb(file);
+    if let Some(file) = file
+        && thumb_long_side() > 0.0
+    {
+        request_thumb(file, Priority::Shown);
     }
     signal(id)
 }
@@ -273,7 +390,8 @@ pub fn thumb_url(id: &PhotoId) -> Option<String> {
 
 fn edit_key(id: &PhotoId, edits: &Edits) -> String {
     format!(
-        "{id}|{}",
+        "{id}|{}|{}",
+        thumb_long_side(),
         tgprep_model::json::stringify(edits).unwrap_or_default()
     )
 }
@@ -287,7 +405,7 @@ async fn render_edited(id: PhotoId, size: Size, edits: Edits, key: String) -> Op
     let bitmap: ImageBitmap = wait(window().create_image_bitmap_with_blob(&blob).ok()?)
         .await
         .ok()?;
-    let target = fit_within(output_size(size, &edits), THUMB_LONG_SIDE);
+    let target = fit_within(output_size(size, &edits), thumb_long_side());
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -334,7 +452,14 @@ impl Drop for PendingRender {
 }
 
 pub fn display_thumb(id: PhotoId) -> Memo<Option<DisplayThumb>> {
-    let base = base_thumb(&id);
+    let base = signal(&id);
+    Effect::new({
+        let id = id.clone();
+        move |_| {
+            THUMB_SIDE.with(|side| side.track());
+            base_thumb(&id);
+        }
+    });
     let edits = Memo::new({
         let id = id.clone();
         move |_| store().doc.with(|doc| doc.meta(&id).edits)

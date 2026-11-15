@@ -1,4 +1,4 @@
-use crate::browser::{Frame, error_message, new_id, settle, write_text};
+use crate::browser::{Frame, error_message, new_id, rem_px, settle, write_text};
 use crate::dnd::{DragPayload, press_to_drag};
 use crate::export::{copy_photo, export_post, prepare_png};
 use crate::i18n::{fill, t};
@@ -6,7 +6,7 @@ use crate::icons::{self, svg};
 use crate::store::{
     CategoryFilter, Mode, PostsView, ViewKey, commit, commit_keyed, open_viewer, store, toast,
 };
-use crate::thumbs::display_thumb;
+use crate::thumbs::{display_thumb, require_thumb_short_side};
 use crate::tile::{CornerButton, Fit, TileProps, tile};
 use crate::ui::{Chip, IconButton, PaneHeader, RangeInput};
 use crate::virtual_list::{ResizeWatch, centered_offset, visible_range, watch_viewport};
@@ -534,6 +534,10 @@ struct Measured {
 #[allow(clippy::too_many_lines)]
 pub fn PostsPane(view: PostsView) -> impl IntoView {
     let store = store();
+    Effect::new(move |_| {
+        let height = store.settings.with(|settings| settings.post_tile_height);
+        require_thumb_short_side(height * rem_px());
+    });
     let filter = active_filter(view);
     let compose = Memo::new(move |_| store.mode.get() == Mode::Compose);
     let visible = Memo::new(move |_| {
