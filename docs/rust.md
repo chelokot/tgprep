@@ -30,7 +30,7 @@ Server environment:
 | `TGPREP_CLIENT_DIR` | the built `dist` directory, read once at start (restart after a rebuild) |
 | `TGPREP_TLS_CERT`, `TGPREP_TLS_KEY` | PEM certificate chain and private key; with both set the server speaks HTTPS, without them plain HTTP |
 
-The release build of the commit that added this line is in `~/.cache/tgprep-release`: the server binary `tgprep-server` and the `dist` it serves.
+The release build of 014dc7b is in `~/.cache/tgprep-release`: the server binary `tgprep-server` and the `dist` it serves.
 
 ```
 TGPREP_LISTEN=0.0.0.0:443 TGPREP_CLIENT_DIR=$HOME/.cache/tgprep-release/dist TGPREP_TLS_CERT=cert.pem TGPREP_TLS_KEY=key.pem ~/.cache/tgprep-release/tgprep-server
@@ -54,6 +54,7 @@ Profiling the wasm with function names: build with `CARGO_PROFILE_WEB_STRIP=none
 - Thumbnails: visible tiles first (newest request first, as before), on all four workers. Then read-ahead, nearest first: 8 screens below and 2 above the library window, on at most two workers, not while the viewer is open, and only after a second without input. Read-ahead decodes share the renderer's image decode threads with what is on screen. TS read ahead only by accident (about 144 tiles mounted in its first render).
 - When the post header does not fit (820 px panes), its actions wrap to a row of their own; TS pushed Delete post outside the post and scrolled the pane sideways.
 - ←/→ in the viewer do not also step a focused slider; in TS the next photo got a 0.1° straighten after touching a slider.
+- The viewer's Previous and Next sit at the edges of the photo area, also with the edit panel open (TS put Next 1.75 rem from the panel), and the crop stage keeps 4.5 rem side margins (TS 2.5 rem), so the crop handles never sit under them.
 - Thumbnail size follows the largest tile on screen: 1.5 × the tile's short side (library cell, post tile height) × `devicePixelRatio`, rounded up to 256 px, at least 512, and it only grows; mounted tiles ask again when it grows. TS used a fixed 720 px, which a 24 rem library cell or a 20 rem post tile upscales on a 2x screen. The cache key includes the size.
 - A photo whose file cannot be read any more shows the broken-image icon; in TS its worker never came back to the pool, so after four such files no thumbnail was made.
 - Geometry uses exact doubles; Chromium's DOMMatrix has about 1e-8 of float noise (fixture tolerance 1e-6).
@@ -68,9 +69,10 @@ Profiling the wasm with function names: build with `CARGO_PROFILE_WEB_STRIP=none
 
 ## Status (2026-11-15)
 
-Done: model, server, worker, full UI, TS app removed. Measured against TS (see `docs/parity.md`) and stress-tested with 300 photos into 30 posts at 1366×768, 1600×1000 and 820×1180 (`tests/parity/stress.spec.ts`). At 5ebb927, fmt, host and wasm clippy, `cargo test --workspace` and the e2e suite (15 tests) pass.
+Done: model, server, worker, full UI, TS app removed. Measured against TS (see `docs/parity.md`) and stress-tested with 300 photos into 30 posts at 1366×768, 1600×1000 and 820×1180 (`tests/parity/stress.spec.ts`), including drags from the library into posts. At 014dc7b, fmt, host and wasm clippy, `cargo test --workspace`, the e2e suite (16 tests) and the stress pass pass.
 
 Open:
-1. Send-mode copy is slower than TS when read-ahead resumes during the pause before a click (see `docs/parity.md`).
+1. Send-mode copy: the median is about 10 ms above TS, and two plain harness runs had more clicks over 500 ms than TS (8 of 30 against 3 of 30). Read-ahead is ruled out; the cause is not localised (see `docs/parity.md`).
 2. The edit slider frame is about 2 ms slower than TS.
-3. A first visit over a slow link is about 120 ms slower, because of the wasm size.
+3. A first visit over a slow link is about 140 ms slower, because of the wasm size.
+4. Post moves (dragging a post by its handle) are covered by the e2e tests at 1600 and 820, not by the stress pass.
