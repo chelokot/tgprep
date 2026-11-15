@@ -1,4 +1,4 @@
-use crate::browser::{Frame, Serial, Timeout, document, wait, window};
+use crate::browser::{Frame, Listener, Serial, Timeout, document, now, wait, window};
 use crate::idb::KeyValueStore;
 use crate::renderer::{Canvas, Renderer};
 use crate::store::{PhotoFile, store};
@@ -13,8 +13,8 @@ use tgprep_worker::{Job, Request, Response, Thumbnail};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{
-    Blob, File, ImageBitmap, ImageEncodeOptions, MessageEvent, OffscreenCanvas, Url, Worker,
-    WorkerOptions, WorkerType,
+    Blob, File, ImageBitmap, ImageEncodeOptions, MessageEvent, OffscreenCanvas, PointerEvent, Url,
+    Worker, WorkerOptions, WorkerType,
 };
 
 const SHORT_TO_LONG_SIDE: f64 = 1.5;
@@ -22,6 +22,8 @@ const THUMB_SIDE_STEP: f64 = 256.0;
 const EDITED_DELAY_MS: i32 = 250;
 const EDITED_QUALITY: f64 = 0.85;
 const AHEAD_JOBS: usize = 2;
+const IDLE_MS: f64 = 1000.0;
+const INPUT_EVENTS: [&str; 5] = ["pointerdown", "pointermove", "wheel", "keydown", "scroll"];
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Thumb {
@@ -65,7 +67,10 @@ impl Pool {
             .values()
             .filter(|running| running.priority == Priority::Ahead)
             .count();
-        if reading_ahead >= AHEAD_JOBS || store().viewer.with_untracked(Option::is_some) {
+        if reading_ahead >= AHEAD_JOBS
+            || store().viewer.with_untracked(Option::is_some)
+            || IDLE_WAIT.with_borrow(Option::is_some)
+        {
             return None;
         }
         Some((self.nearest_ahead()?, Priority::Ahead))
@@ -97,6 +102,8 @@ thread_local! {
     static RENDERER: RefCell<Option<Renderer>> = const { RefCell::new(None) };
     static RENDERING: Rc<Serial> = Rc::new(Serial::default());
     static THUMB_SIDE: ArcRwSignal<f64> = ArcRwSignal::new(0.0);
+    static LAST_INPUT: Cell<f64> = const { Cell::new(f64::NEG_INFINITY) };
+    static IDLE_WAIT: RefCell<Option<Timeout>> = const { RefCell::new(None) };
 }
 
 pub fn spawn_worker(on_message: impl Fn(&Worker, Response) + 'static) -> Option<Worker> {
@@ -285,13 +292,45 @@ fn received(worker: &Worker, response: Response) {
     pump();
 }
 
-pub fn resume_read_ahead_after_viewer() {
+fn wait_for_idle() {
+    let remaining = LAST_INPUT.get() + IDLE_MS - now();
+    if remaining > 0.0 {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a delay of at most a second"
+        )]
+        let delay = remaining.ceil() as i32;
+        IDLE_WAIT.set(Some(Timeout::new(delay, wait_for_idle)));
+    } else {
+        IDLE_WAIT.take();
+        pump();
+    }
+}
+
+fn note_input(event: &web_sys::Event) {
+    if event
+        .dyn_ref::<PointerEvent>()
+        .is_some_and(|pointer| pointer.type_() == "pointermove" && pointer.buttons() == 0)
+    {
+        return;
+    }
+    LAST_INPUT.set(now());
+    if IDLE_WAIT.with_borrow(Option::is_none) {
+        wait_for_idle();
+    }
+}
+
+pub fn read_ahead_while_idle() {
     let viewer = store().viewer;
     Effect::new(move |_| {
         if viewer.with(Option::is_none) {
             pump();
         }
     });
+    let target: web_sys::EventTarget = window().into();
+    let listeners =
+        INPUT_EVENTS.map(|name| Listener::new(&target, name, true, |event| note_input(&event)));
+    StoredValue::new_local(listeners);
 }
 
 pub fn start_workers() {

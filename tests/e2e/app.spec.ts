@@ -191,6 +191,24 @@ test('prepares thumbnails of the photos below the screen before scrolling', asyn
   expect(await library(page).locator('[data-photo]').count()).toBeLessThan(files.length)
 })
 
+test('waits with thumbnails below the screen while the user is busy', async ({ page }) => {
+  const files = images(80)
+  await openFolder(page, files, null, null)
+  await expect(library(page).locator('[data-photo] img').first()).toBeVisible()
+  const busy = async (milliseconds: number) => {
+    for (let elapsed = 0; elapsed < milliseconds; elapsed += 150) {
+      await page.keyboard.press('Shift')
+      await page.waitForTimeout(150)
+    }
+  }
+  await busy(1000)
+  const settled = await cachedThumbs(page)
+  await busy(1500)
+  expect(await cachedThumbs(page)).toBe(settled)
+  expect(settled).toBeLessThan(files.length)
+  await expect.poll(() => cachedThumbs(page), { timeout: 20_000 }).toBe(files.length)
+})
+
 test('waits with thumbnails below the screen while the viewer is open', async ({ page }) => {
   const files = images(80)
   await openFolder(page, files, null, null)

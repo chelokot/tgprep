@@ -9,7 +9,7 @@ use crate::store::{
     DEFAULT_PANE_WIDTHS, History, Mode, PostsView, TELEGRAM_LONG_SIDE, clear_selection, redo,
     save_settings, store, undo,
 };
-use crate::thumbs::resume_read_ahead_after_viewer;
+use crate::thumbs::read_ahead_while_idle;
 use crate::ui::{Choice, IconButton, Label, Segmented, Toasts};
 use crate::viewer::ViewerLayer;
 use crate::welcome::Welcome;
@@ -207,7 +207,7 @@ pub fn App() -> impl IntoView {
     let store = store();
     Effect::new(move |_| store.settings.with(save_settings));
     watch_saves();
-    resume_read_ahead_after_viewer();
+    read_ahead_while_idle();
     let target: web_sys::EventTarget = window().into();
     let shortcuts =
         StoredValue::new_local(Listener::new(&target, "keydown", false, move |event| {
