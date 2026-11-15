@@ -94,7 +94,6 @@ for (const viewport of viewports) {
       mkdirSync(output, { recursive: true })
       const report: Record<string, string[]> = {}
       const check = async (state: string) => {
-        console.log(viewport.name, state, new Date().toISOString())
         await page.waitForTimeout(400)
         await page.screenshot({ path: `${output}/${viewport.name}-${state}.png` })
         report[state] = await layoutProblems(page)
@@ -164,7 +163,7 @@ for (const viewport of viewports) {
       await check('send')
 
       writeFileSync(`${output}/${viewport.name}.json`, JSON.stringify(report, null, 2))
-      for (const [state, problems] of Object.entries(report)) console.log(viewport.name, state, problems.length, problems.slice(0, 12))
+      expect(Object.entries(report).filter(([, problems]) => problems.length > 0)).toEqual([])
     })
   })
 }
