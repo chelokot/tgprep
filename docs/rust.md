@@ -17,12 +17,26 @@ CSR only: there is no server data (everything comes from the folder the browser 
 
 ```
 export PATH=$HOME/.cargo/bin:$PATH CARGO_TARGET_DIR=$HOME/.cache/tgprep-target RUSTC_WRAPPER=$HOME/.cargo/bin/sccache
-crates/web/build.sh            # writes dist/
+crates/web/build.sh            # writes dist/: wasm32 profile `web` (opt z, fat LTO, panic abort), --cfg erase_components, wasm-bindgen, wasm-opt -Oz, Tailwind, hashed names
 cargo build --release -p tgprep-server
-TGPREP_LISTEN=127.0.0.1:5180 TGPREP_CLIENT_DIR=dist target/release/tgprep-server
+TGPREP_LISTEN=127.0.0.1:5180 TGPREP_CLIENT_DIR=dist $CARGO_TARGET_DIR/release/tgprep-server
 ```
 
-`TGPREP_TLS_CERT` and `TGPREP_TLS_KEY` (PEM) switch the server to HTTPS; without them it serves plain HTTP. The server reads `dist` once at start, so restart it after a rebuild.
+Server environment:
+
+| variable | meaning |
+|---|---|
+| `TGPREP_LISTEN` | socket address to listen on, e.g. `0.0.0.0:443` |
+| `TGPREP_CLIENT_DIR` | the built `dist` directory, read once at start (restart after a rebuild) |
+| `TGPREP_TLS_CERT`, `TGPREP_TLS_KEY` | PEM certificate chain and private key; with both set the server speaks HTTPS, without them plain HTTP |
+
+The release binary is copied to `~/.cache/tgprep-release/tgprep-server` (built at the commit that added this line, together with `dist`). Run it with `dist` next to it:
+
+```
+TGPREP_LISTEN=0.0.0.0:443 TGPREP_CLIENT_DIR=/path/to/dist TGPREP_TLS_CERT=cert.pem TGPREP_TLS_KEY=key.pem ~/.cache/tgprep-release/tgprep-server
+```
+
+Profiling the wasm with function names: build with `CARGO_PROFILE_WEB_STRIP=none crates/web/build.sh`, then replace `dist/assets/tgprep_bg-*.wasm` with `wasm-bindgen --target web --no-typescript --keep-debug` output of `$CARGO_TARGET_DIR/wasm32-unknown-unknown/web/tgprep-web.wasm` (no `wasm-opt`); the JS glue is identical.
 
 ## Tests
 
@@ -34,10 +48,12 @@ TGPREP_LISTEN=127.0.0.1:5180 TGPREP_CLIENT_DIR=dist target/release/tgprep-server
 ## Deliberate differences
 
 - A commit that changes nothing adds no undo step (immer made a new doc for every `detach`).
-- An edited thumbnail that is still rendering shows the loading pulse instead of the broken-image icon.
+- An edited thumbnail that is still rendering shows the photo's previous thumbnail (TS showed the broken-image icon on the first edit). A running pulse there also kept Chromium's compositor on vsync and delayed every slider frame.
 - A worker joins the pool only after it posts `ready`; thumbnail responses from a folder opened before are dropped.
 - The drop target is resolved on every pointer move as well as every frame (the TS app resolved it only in the frame callback).
-- Thumbnails: visible tiles first (newest request first, as before); idle workers then read ahead 8 screens below and 2 above the library window, nearest first. TS read ahead only by accident (about 144 tiles mounted in its first render).
+- Thumbnails: visible tiles first (newest request first, as before), on all four workers. Then read-ahead, nearest first: 8 screens below and 2 above the library window, on at most two workers, not while the viewer is open, and only after a second without input. Read-ahead decodes share the renderer's image decode threads with what is on screen. TS read ahead only by accident (about 144 tiles mounted in its first render).
+- When the post header does not fit (820 px panes), its actions wrap to a row of their own; TS pushed Delete post outside the post and scrolled the pane sideways.
+- ←/→ in the viewer do not also step a focused slider; in TS the next photo got a 0.1° straighten after touching a slider.
 - Thumbnail size follows the largest tile on screen: 1.5 × the tile's short side (library cell, post tile height) × `devicePixelRatio`, rounded up to 256 px, at least 512, and it only grows; mounted tiles ask again when it grows. TS used a fixed 720 px, which a 24 rem library cell or a 20 rem post tile upscales on a 2x screen. The cache key includes the size.
 - A photo whose file cannot be read any more shows the broken-image icon; in TS its worker never came back to the pool, so after four such files no thumbnail was made.
 - Geometry uses exact doubles; Chromium's DOMMatrix has about 1e-8 of float noise (fixture tolerance 1e-6).
@@ -52,13 +68,9 @@ TGPREP_LISTEN=127.0.0.1:5180 TGPREP_CLIENT_DIR=dist target/release/tgprep-server
 
 ## Status (2026-11-15)
 
-Done: model, server, worker, full UI, TS app removed; fmt, host and wasm clippy and `cargo test --workspace` clean at 607a6c6 (rerun them after later changes); e2e 10/10 (×3); perf harness and `docs/parity.md`.
+Done: model, server, worker, full UI, TS app removed. Measured against TS (see `docs/parity.md`) and stress-tested with 300 photos into 30 posts at 1366×768, 1600×1000 and 820×1180 (`tests/parity/stress.spec.ts`). At 5ebb927, fmt, host and wasm clippy, `cargo test --workspace` and the e2e suite (15 tests) pass.
 
-The sub-threshold text-selection bug reported earlier does not exist: the parity script pressed `g.jpg` at y = 1734 in an 1180 px tall viewport (on `<html>`) and dragged a plain text selection; `screens.spec.ts` now scrolls the tile into view, and an e2e test guards that dragging a photo over text selects nothing.
-
-Next:
-1. Edit slider is a frame slower than TS inside the perf harness only (see `docs/parity.md`); find out why before deciding anything on it.
-2. Decide on `--cfg erase_components` (10% smaller wasm, no measured cost) and wire it into `build.sh` if kept; the nightly build-std option is listed in `docs/parity.md`.
-3. Stress pass: script 300 photos into 30 posts (drag, reorder, captions, edits, archive, send) and check fit at 1366×768, 1600×1000, 820×1180.
-4. Rerun the parity screens for both builds (`screens.spec.ts` changed: the 820 drag is now a real drag).
-5. Release `dist`, release server binary copied out of the target dir, delete the target dir.
+Open:
+1. Send-mode copy is slower than TS when read-ahead resumes during the pause before a click (see `docs/parity.md`).
+2. The edit slider frame is about 2 ms slower than TS.
+3. A first visit over a slow link is about 120 ms slower, because of the wasm size.
