@@ -85,6 +85,18 @@ test('viewer navigates, archives to the next photo and highlights the last one o
   await expect(libraryTile(page, 'c.jpg')).toHaveClass(/animate-glow/)
 })
 
+test('moving to the next photo with a slider focused leaves the next photo unedited', async ({ page }) => {
+  await openFolder(page, images(3))
+  await libraryTile(page, 'a.jpg').click()
+  const dialog = page.getByRole('dialog')
+  if ((await dialog.getByRole('slider', { name: 'Straighten' }).count()) === 0) await page.keyboard.press('e')
+  await dialog.getByRole('slider', { name: 'Straighten' }).fill('7')
+  await page.keyboard.press('ArrowRight')
+  await expect(dialog).toContainText('b.jpg')
+  await expect(dialog.getByRole('slider', { name: 'Straighten' })).toHaveValue('0')
+  await expect.poll(async () => Object.keys((await savedState(page))?.photos ?? {})).toEqual(['a.jpg'])
+})
+
 test('edits are stored as settings and shown in thumbnails', async ({ page }) => {
   await openFolder(page, images(1, 400, 200))
   const view = postsView(page, 0)

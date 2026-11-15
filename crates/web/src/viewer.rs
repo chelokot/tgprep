@@ -833,8 +833,10 @@ fn ViewerScreen() -> impl IntoView {
                         copy_current();
                     }
                 }
-                "ArrowLeft" => go(-1),
-                "ArrowRight" => go(1),
+                "ArrowLeft" | "ArrowRight" => {
+                    event.prevent_default();
+                    go(if key == "ArrowLeft" { -1 } else { 1 });
+                }
                 "a" | "Delete" => archive_and_advance(),
                 "c" | " " => {
                     event.prevent_default();
