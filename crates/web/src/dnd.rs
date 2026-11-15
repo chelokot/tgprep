@@ -4,7 +4,6 @@ use crate::store::{CategoryFilter, clear_selection, commit, new_id, store};
 use crate::thumbs::thumb_url;
 use leptos::prelude::*;
 use std::cell::RefCell;
-use std::rc::Rc;
 use tgprep_model::doc::{CategoryId, PhotoId, PostId};
 use tgprep_model::ops::{self, PhotoDestination};
 use wasm_bindgen::prelude::*;
@@ -312,8 +311,7 @@ fn resolve_target(payload: &DragPayload, point: (f64, f64)) -> Option<DropTarget
     let Some(card) = card else {
         let above = cards
             .iter()
-            .filter(|candidate| candidate.bounds.bottom() < point.1)
-            .last();
+            .rfind(|candidate| candidate.bounds.bottom() < point.1);
         let index = above.map_or_else(
             || {
                 cards.first().map_or_else(
@@ -388,7 +386,7 @@ fn drop_on(payload: DragPayload, target: DropTarget) {
                             PhotoDestination::Gap { index, category },
                             from_post.as_ref(),
                             || PostId(new_id()),
-                        )
+                        );
                     });
                 }
                 DropTarget::Post {
@@ -404,7 +402,7 @@ fn drop_on(payload: DragPayload, target: DropTarget) {
                             PhotoDestination::Post { post, index },
                             from_post.as_ref(),
                             || PostId(new_id()),
-                        )
+                        );
                     });
                 }
                 DropTarget::Post { valid: false, .. } => {}
@@ -423,7 +421,7 @@ struct Session {
     on_click: Option<Box<dyn FnOnce(ClickModifiers)>>,
     previous_time: f64,
     frame: Option<i32>,
-    tick: Option<Rc<Closure<dyn FnMut(f64)>>>,
+    tick: Option<Closure<dyn FnMut(f64)>>,
     _listeners: Vec<Listener>,
 }
 
@@ -443,7 +441,7 @@ fn request_tick() {
             && let Some(tick) = &session.tick
         {
             session.frame = window()
-                .request_animation_frame(tick.as_ref().as_ref().unchecked_ref())
+                .request_animation_frame(tick.as_ref().unchecked_ref())
                 .ok();
         }
     });
@@ -476,7 +474,7 @@ fn moved(event: &PointerEvent) {
             }
             session.payload = session.get_payload.take().map(|get_payload| get_payload());
             session.previous_time = now();
-            session.tick = Some(Rc::new(Closure::<dyn FnMut(f64)>::new(tick)));
+            session.tick = Some(Closure::<dyn FnMut(f64)>::new(tick));
             return Some((session.payload.clone()?, true));
         }
         Some((session.payload.clone()?, false))

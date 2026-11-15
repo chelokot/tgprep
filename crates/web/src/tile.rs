@@ -48,6 +48,7 @@ pub struct TileProps {
     pub style: Option<Signal<String>>,
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn tile(
     props: TileProps,
     on_pointer_down: impl Fn(PointerEvent) + 'static,

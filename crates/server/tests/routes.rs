@@ -39,10 +39,7 @@ async fn get(app: &axum::Router, path: &str, encoding: Option<&str>) -> axum::re
         .expect("response")
 }
 
-fn header_of<'a>(
-    response: &'a axum::response::Response,
-    name: header::HeaderName,
-) -> Option<&'a str> {
+fn header_of(response: &axum::response::Response, name: header::HeaderName) -> Option<&str> {
     response
         .headers()
         .get(name)

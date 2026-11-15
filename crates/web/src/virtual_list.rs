@@ -59,9 +59,9 @@ pub fn watch_viewport(scroller: NodeRef<Div>) -> Viewport {
             viewport.width.set(rect.width());
             viewport.height.set(rect.height());
         });
-        let scrolled = element.clone();
+        let target = element.clone();
         let listener = Listener::new(&element, "scroll", false, move |_| {
-            viewport.scroll_top.set(f64::from(scrolled.scroll_top()))
+            viewport.scroll_top.set(f64::from(target.scroll_top()));
         });
         watches.set_value(observed.map(|observed| (observed, listener)));
     });

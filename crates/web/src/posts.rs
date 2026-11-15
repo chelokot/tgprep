@@ -468,10 +468,10 @@ fn CategoryChip(id: CategoryId, view: PostsView, active: Memo<CategoryFilter>) -
                         value=name
                         on:blur=move |_| editing.set(false)
                         on:keydown=move |event: web_sys::KeyboardEvent| {
-                            if event.key() == "Enter" || event.key() == "Escape" {
-                                if let Some(input) = event.current_target().and_then(|target| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlElement>(target).ok()) {
-                                    let _ = input.blur();
-                                }
+                            if (event.key() == "Enter" || event.key() == "Escape")
+                                && let Some(input) = event.current_target().and_then(|target| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlElement>(target).ok())
+                            {
+                                let _ = input.blur();
                             }
                         }
                         on:input=move |event| {
@@ -532,6 +532,7 @@ struct Measured {
 }
 
 #[component]
+#[allow(clippy::too_many_lines)]
 pub fn PostsPane(view: PostsView) -> impl IntoView {
     let store = store();
     let filter = active_filter(view);
@@ -669,7 +670,7 @@ pub fn PostsPane(view: PostsView) -> impl IntoView {
                                 icon=icons::ARROW_DOWN_WIDE_NARROW
                                 label=t().sort_posts_by_time
                                 on_click=move |()| {
-                                    let times = store.library.with_untracked(|library| library.as_ref().map(|library| library.files.iter().map(|file| (file.id.clone(), file.last_modified)).collect()).unwrap_or_default());
+                                    let times: HashMap<_, _> = store.library.with_untracked(|library| library.as_ref().map(|library| library.files.iter().map(|file| (file.id.clone(), file.last_modified)).collect()).unwrap_or_default());
                                     commit(move |doc| ops::sort_posts_by_time(doc, &times));
                                 }
                             />

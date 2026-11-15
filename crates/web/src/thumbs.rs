@@ -44,11 +44,16 @@ struct Pool {
     generation: u32,
 }
 
+struct Pending {
+    updates: Vec<(PhotoId, Thumb)>,
+    frame: Option<Frame>,
+}
+
 thread_local! {
     static POOL: RefCell<Pool> = RefCell::new(Pool::default());
     static THUMBS: RefCell<HashMap<PhotoId, ArcRwSignal<Option<Thumb>>>> = RefCell::new(HashMap::new());
     static BLOBS: RefCell<HashMap<PhotoId, Blob>> = RefCell::new(HashMap::new());
-    static PENDING: RefCell<(Vec<(PhotoId, Thumb)>, Option<Frame>)> = const { RefCell::new((Vec::new(), None)) };
+    static PENDING: RefCell<Pending> = const { RefCell::new(Pending { updates: Vec::new(), frame: None }) };
     static CACHE: KeyValueStore = KeyValueStore::new("tgprep-thumbs", "thumbs");
     static EDITED: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
     static RENDERER: RefCell<Option<Renderer>> = const { RefCell::new(None) };
@@ -89,13 +94,13 @@ fn signal(id: &PhotoId) -> ArcRwSignal<Option<Thumb>> {
 }
 
 fn publish(id: PhotoId, thumb: Thumb) {
-    PENDING.with_borrow_mut(|(updates, frame)| {
-        updates.push((id, thumb));
-        if frame.is_none() {
-            *frame = Some(Frame::request(|_| {
-                let updates = PENDING.with_borrow_mut(|(updates, frame)| {
-                    frame.take();
-                    std::mem::take(updates)
+    PENDING.with_borrow_mut(|pending| {
+        pending.updates.push((id, thumb));
+        if pending.frame.is_none() {
+            pending.frame = Some(Frame::request(|_| {
+                let updates = PENDING.with_borrow_mut(|pending| {
+                    pending.frame.take();
+                    std::mem::take(&mut pending.updates)
                 });
                 for (id, thumb) in updates {
                     signal(&id).set(Some(thumb));

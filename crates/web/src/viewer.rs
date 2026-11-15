@@ -14,7 +14,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::sync::Arc;
-use tgprep_model::doc::{Adjustment, Aspect, Crop, Edits, PhotoId};
+use tgprep_model::doc::{Adjustment, Aspect, Crop, Edits, PhotoId, Quarter};
 use tgprep_model::geometry::{
     Handle, Side, Size, aspect_ratio, fit_crop, frame_size, move_crop, output_size, resize_crop,
 };
@@ -211,7 +211,7 @@ fn CropOverlay(id: PhotoId, size: Size) -> impl IntoView {
             });
         });
         let ending = Listener::new(&target, "pointerup", false, move |_| {
-            dragging.update_value(Vec::clear)
+            dragging.update_value(Vec::clear);
         });
         dragging.set_value(vec![moving, ending]);
     };
@@ -484,7 +484,7 @@ fn EditPanel(id: PhotoId, size: Size, cropping: RwSignal<bool>) -> impl IntoView
                         tone=Tone::Overlay
                         icon=icons::UNDO_2
                         label=t().reset_crop
-                        on_click=move |()| set_edits(&reset_crop, "reset-crop", |current| Edits { crop: Crop::FULL, angle: 0.0, quarter: Default::default(), flip: false, aspect: Aspect::Free, ..current })
+                        on_click=move |()| set_edits(&reset_crop, "reset-crop", |current| Edits { crop: Crop::FULL, angle: 0.0, quarter: Quarter::default(), flip: false, aspect: Aspect::Free, ..current })
                     />
                 </div>
                 <label class="block text-xs text-white/60">
@@ -752,8 +752,7 @@ fn ViewerScreen() -> impl IntoView {
         store.viewer.with(|viewer| {
             viewer
                 .as_ref()
-                .map(|viewer| viewer.id.clone())
-                .unwrap_or_else(|| PhotoId(String::new()))
+                .map_or_else(|| PhotoId(String::new()), |viewer| viewer.id.clone())
         })
     });
     let position = Memo::new(move |_| {
@@ -781,7 +780,7 @@ fn ViewerScreen() -> impl IntoView {
     let set_editing = move |open: bool| {
         store
             .settings
-            .update(|settings| settings.edit_panel_open = open)
+            .update(|settings| settings.edit_panel_open = open);
     };
     let cropping = RwSignal::new(false);
     let comparing = RwSignal::new(false);
@@ -826,9 +825,8 @@ fn ViewerScreen() -> impl IntoView {
             let key = event.key();
             let current = id.get_untracked();
             match key.as_str() {
-                "Escape" if cropping.get_untracked() => cropping.set(false),
+                "Escape" | "Enter" if cropping.get_untracked() => cropping.set(false),
                 "Escape" => close_viewer(),
-                "Enter" if cropping.get_untracked() => cropping.set(false),
                 _ if event.ctrl_key() || event.meta_key() => {
                     if key.to_lowercase() == "c" {
                         event.prevent_default();

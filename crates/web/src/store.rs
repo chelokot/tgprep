@@ -166,6 +166,7 @@ impl PostsFilters {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Settings {
     pub export_long_side: Option<u32>,
     pub library_layout: LibraryLayout,
@@ -291,8 +292,7 @@ fn nonce() -> u64 {
 pub fn new_id() -> String {
     window()
         .crypto()
-        .map(|crypto| crypto.random_uuid())
-        .unwrap_or_else(|_| format!("{}", now()))
+        .map_or_else(|_| now().to_string(), |crypto| crypto.random_uuid())
 }
 
 pub fn commit(recipe: impl FnOnce(&mut Doc)) {

@@ -6,8 +6,8 @@ use crate::library::Library;
 use crate::persistence::{pick_folder, watch_saves};
 use crate::posts::PostsPane;
 use crate::store::{
-    DEFAULT_PANE_WIDTHS, Mode, PostsView, TELEGRAM_LONG_SIDE, clear_selection, redo, save_settings,
-    store, undo,
+    DEFAULT_PANE_WIDTHS, History, Mode, PostsView, TELEGRAM_LONG_SIDE, clear_selection, redo,
+    save_settings, store, undo,
 };
 use crate::ui::{Choice, IconButton, Label, Segmented, Toasts};
 use crate::viewer::ViewerLayer;
@@ -72,8 +72,8 @@ fn TopBar() -> impl IntoView {
             </button>
             <span class="hidden text-xs text-faint lg:inline">{stats}</span>
             <div class="flex-1"></div>
-            <IconButton icon=icons::UNDO_2 label=t().undo disabled=Signal::derive(move || !store.history.with(|history| history.can_undo())) on_click=move |()| undo() />
-            <IconButton icon=icons::REDO_2 label=t().redo disabled=Signal::derive(move || !store.history.with(|history| history.can_redo())) on_click=move |()| redo() />
+            <IconButton icon=icons::UNDO_2 label=t().undo disabled=Signal::derive(move || !store.history.with(History::can_undo)) on_click=move |()| undo() />
+            <IconButton icon=icons::REDO_2 label=t().redo disabled=Signal::derive(move || !store.history.with(History::can_redo)) on_click=move |()| redo() />
             <Segmented
                 value=Signal::derive(move || store.settings.with(|settings| settings.export_long_side))
                 on_change=move |long_side| store.settings.update(|settings| settings.export_long_side = long_side)

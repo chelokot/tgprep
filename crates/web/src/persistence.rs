@@ -273,7 +273,7 @@ pub async fn open_folder(root: FileSystemDirectoryHandle) -> Result<bool, JsValu
             timer: None,
             writing: false,
             queued: None,
-        })
+        });
     });
     remember_folder(&root).await?;
     Ok(true)

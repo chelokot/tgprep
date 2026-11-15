@@ -141,7 +141,7 @@ impl<'de> Deserialize<'de> for Adjustments {
                         .find(|adjustment| adjustment.key() == key)
                     {
                         Some(adjustment) => {
-                            values[*adjustment as usize] = Some(map.next_value::<f64>()?)
+                            values[*adjustment as usize] = Some(map.next_value::<f64>()?);
                         }
                         None => {
                             map.next_value::<de::IgnoredAny>()?;
@@ -246,6 +246,7 @@ pub enum Quarter {
 }
 
 impl Quarter {
+    #[must_use]
     pub const fn turned(self, clockwise: bool) -> Self {
         match (self, clockwise) {
             (Self::None, true) | (Self::Half, false) => Self::Right,

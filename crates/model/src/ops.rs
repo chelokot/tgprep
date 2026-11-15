@@ -2,6 +2,7 @@ use crate::doc::{
     CATEGORY_COLORS, Category, CategoryId, Doc, MAX_POST_PHOTOS, PhotoId, PhotoMeta, Post, PostId,
 };
 use std::collections::{HashMap, HashSet};
+use std::hash::BuildHasher;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PhotoDestination {
@@ -123,7 +124,7 @@ pub fn move_post(doc: &mut Doc, post: &PostId, index: usize) {
     doc.posts.insert(position, moved);
 }
 
-pub fn sort_posts_by_time(doc: &mut Doc, times: &HashMap<PhotoId, f64>) {
+pub fn sort_posts_by_time<S: BuildHasher>(doc: &mut Doc, times: &HashMap<PhotoId, f64, S>) {
     let mut previous = f64::NEG_INFINITY;
     let mut keyed: Vec<(f64, Post)> = doc
         .posts

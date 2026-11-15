@@ -234,6 +234,7 @@ fn LibraryTile(
 }
 
 #[component]
+#[allow(clippy::too_many_lines)]
 pub fn Library() -> impl IntoView {
     let store = store();
     let settings = store.settings;

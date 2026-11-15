@@ -349,11 +349,11 @@ fn span(side: Side, start: f64, length: f64, pointer: f64) -> (f64, f64) {
     }
 }
 
-fn anchored(side: Side, start: f64, length: f64, size: f64) -> f64 {
+fn anchored(side: Side, start: f64, length: f64, extent: f64) -> f64 {
     match side {
         Side::End => start,
-        Side::Start => start + length - size,
-        Side::Middle => start + length / 2.0 - size / 2.0,
+        Side::Start => start + length - extent,
+        Side::Middle => start + length / 2.0 - extent / 2.0,
     }
 }
 

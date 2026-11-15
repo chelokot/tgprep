@@ -27,5 +27,5 @@ pub fn stringify<T: Serialize>(value: &T) -> serde_json::Result<String> {
         &mut buffer,
         JsFormatter,
     ))?;
-    String::from_utf8(buffer).map_err(|error| serde::ser::Error::custom(error))
+    String::from_utf8(buffer).map_err(serde::ser::Error::custom)
 }
