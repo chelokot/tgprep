@@ -6,7 +6,7 @@ out=${1:-$web/../../dist}
 target=${CARGO_TARGET_DIR:-$web/../../target}
 wasm=$target/wasm32-unknown-unknown/web
 
-CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="-Cdebuginfo=0 --cfg erase_components" \
+CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="-Cdebuginfo=0 --cfg erase_components --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}/registry/src=/cargo" \
   cargo build --profile web --target wasm32-unknown-unknown -p tgprep-web -p tgprep-worker --manifest-path "$web/Cargo.toml"
 rm -rf "$out"
 mkdir -p "$out/assets"
