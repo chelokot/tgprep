@@ -1,4 +1,6 @@
-use crate::doc::{CATEGORY_COLORS, Category, CategoryId, Doc, MAX_POST_PHOTOS, PhotoId, PhotoMeta, Post, PostId};
+use crate::doc::{
+    CATEGORY_COLORS, Category, CategoryId, Doc, MAX_POST_PHOTOS, PhotoId, PhotoMeta, Post, PostId,
+};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -8,14 +10,27 @@ pub enum PhotoDestination {
 }
 
 pub fn create_post(id: PostId, items: Vec<PhotoId>, category: CategoryId) -> Post {
-    Post { id, category, items, caption: String::new(), sent: false }
+    Post {
+        id,
+        category,
+        items,
+        caption: String::new(),
+        sent: false,
+    }
 }
 
 fn first_survivor<T>(order: &[T], from: usize, survives: impl Fn(&T) -> bool) -> Option<&T> {
-    order.get(from..).and_then(|rest| rest.iter().find(|item| survives(item)))
+    order
+        .get(from..)
+        .and_then(|rest| rest.iter().find(|item| survives(item)))
 }
 
-fn detach(doc: &mut Doc, moving: &HashSet<&PhotoId>, in_scope: impl Fn(&Post) -> bool, keep: Option<&PostId>) {
+fn detach(
+    doc: &mut Doc,
+    moving: &HashSet<&PhotoId>,
+    in_scope: impl Fn(&Post) -> bool,
+    keep: Option<&PostId>,
+) {
     let mut emptied = HashSet::new();
     for post in &mut doc.posts {
         if !in_scope(post) {
@@ -27,45 +42,84 @@ fn detach(doc: &mut Doc, moving: &HashSet<&PhotoId>, in_scope: impl Fn(&Post) ->
             emptied.insert(post.id.clone());
         }
     }
-    doc.posts.retain(|post| Some(&post.id) == keep || !emptied.contains(&post.id) || !post.caption.trim().is_empty());
+    doc.posts.retain(|post| {
+        Some(&post.id) == keep || !emptied.contains(&post.id) || !post.caption.trim().is_empty()
+    });
 }
 
-pub fn place_photos(doc: &mut Doc, ids: &[PhotoId], destination: PhotoDestination, source: Option<&PostId>, mut new_post_id: impl FnMut() -> PostId) {
+pub fn place_photos(
+    doc: &mut Doc,
+    ids: &[PhotoId],
+    destination: PhotoDestination,
+    source: Option<&PostId>,
+    mut new_post_id: impl FnMut() -> PostId,
+) {
     let moving: HashSet<&PhotoId> = ids.iter().collect();
     match destination {
         PhotoDestination::Post { post, index } => {
-            let Some(target) = doc.post(&post) else { return };
+            let Some(target) = doc.post(&post) else {
+                return;
+            };
             let category = target.category.clone();
             let anchor = first_survivor(&target.items, index, |id| !moving.contains(id)).cloned();
-            detach(doc, &moving, |candidate| candidate.category == category || Some(&candidate.id) == source, Some(&post));
-            let Some(target) = doc.posts.iter_mut().find(|candidate| candidate.id == post) else { return };
-            let position = anchor.and_then(|anchor| target.items.iter().position(|id| *id == anchor)).unwrap_or(target.items.len());
+            detach(
+                doc,
+                &moving,
+                |candidate| candidate.category == category || Some(&candidate.id) == source,
+                Some(&post),
+            );
+            let Some(target) = doc.posts.iter_mut().find(|candidate| candidate.id == post) else {
+                return;
+            };
+            let position = anchor
+                .and_then(|anchor| target.items.iter().position(|id| *id == anchor))
+                .unwrap_or(target.items.len());
             target.items.splice(position..position, ids.iter().cloned());
         }
         PhotoDestination::Gap { index, category } => {
             let order: Vec<PostId> = doc.posts.iter().map(|post| post.id.clone()).collect();
-            detach(doc, &moving, |candidate| candidate.category == category || Some(&candidate.id) == source, None);
+            detach(
+                doc,
+                &moving,
+                |candidate| candidate.category == category || Some(&candidate.id) == source,
+                None,
+            );
             let surviving: HashSet<&PostId> = doc.posts.iter().map(|post| &post.id).collect();
             let position = first_survivor(&order, index, |id| surviving.contains(id))
                 .and_then(|anchor| doc.post_index(anchor))
                 .unwrap_or(doc.posts.len());
-            let created: Vec<Post> =
-                ids.chunks(MAX_POST_PHOTOS).map(|chunk| create_post(new_post_id(), chunk.to_vec(), category.clone())).collect();
+            let created: Vec<Post> = ids
+                .chunks(MAX_POST_PHOTOS)
+                .map(|chunk| create_post(new_post_id(), chunk.to_vec(), category.clone()))
+                .collect();
             doc.posts.splice(position..position, created);
         }
     }
 }
 
 pub fn unplace_photos(doc: &mut Doc, ids: &[PhotoId], post: &PostId) {
-    detach(doc, &ids.iter().collect(), |candidate| &candidate.id == post, None);
+    detach(
+        doc,
+        &ids.iter().collect(),
+        |candidate| &candidate.id == post,
+        None,
+    );
 }
 
 pub fn move_post(doc: &mut Doc, post: &PostId, index: usize) {
-    let order: Vec<PostId> = doc.posts.iter().map(|candidate| candidate.id.clone()).collect();
+    let order: Vec<PostId> = doc
+        .posts
+        .iter()
+        .map(|candidate| candidate.id.clone())
+        .collect();
     let anchor = first_survivor(&order, index, |id| id != post).cloned();
-    let Some(from) = doc.post_index(post) else { return };
+    let Some(from) = doc.post_index(post) else {
+        return;
+    };
     let moved = doc.posts.remove(from);
-    let position = anchor.and_then(|anchor| doc.post_index(&anchor)).unwrap_or(doc.posts.len());
+    let position = anchor
+        .and_then(|anchor| doc.post_index(&anchor))
+        .unwrap_or(doc.posts.len());
     doc.posts.insert(position, moved);
 }
 
@@ -75,7 +129,11 @@ pub fn sort_posts_by_time(doc: &mut Doc, times: &HashMap<PhotoId, f64>) {
         .posts
         .drain(..)
         .map(|post| {
-            let mut known: Vec<f64> = post.items.iter().filter_map(|id| times.get(id).copied()).collect();
+            let mut known: Vec<f64> = post
+                .items
+                .iter()
+                .filter_map(|id| times.get(id).copied())
+                .collect();
             known.sort_by(f64::total_cmp);
             if !known.is_empty() {
                 previous = known[(known.len() - 1) / 2];
@@ -112,10 +170,17 @@ pub fn set_sent(doc: &mut Doc, post: &PostId, sent: bool) {
 }
 
 pub fn set_post_category(doc: &mut Doc, post: &PostId, category: &CategoryId) {
-    let Some(target) = post_mut(doc, post) else { return };
+    let Some(target) = post_mut(doc, post) else {
+        return;
+    };
     target.category = category.clone();
     let items = target.items.clone();
-    detach(doc, &items.iter().collect(), |other| &other.category == category && &other.id != post, None);
+    detach(
+        doc,
+        &items.iter().collect(),
+        |other| &other.category == category && &other.id != post,
+        None,
+    );
 }
 
 pub fn add_category(doc: &mut Doc, id: CategoryId, name: String) {
@@ -124,7 +189,11 @@ pub fn add_category(doc: &mut Doc, id: CategoryId, name: String) {
 }
 
 pub fn rename_category(doc: &mut Doc, id: &CategoryId, name: String) {
-    if let Some(category) = doc.categories.iter_mut().find(|category| &category.id == id) {
+    if let Some(category) = doc
+        .categories
+        .iter_mut()
+        .find(|category| &category.id == id)
+    {
         category.name = name;
     }
 }
@@ -135,11 +204,21 @@ pub fn delete_category(doc: &mut Doc, id: &CategoryId) {
     }
     doc.categories.retain(|category| &category.id != id);
     let fallback = doc.first_category().id.clone();
-    let moved: Vec<PostId> = doc.posts.iter().filter(|post| &post.category == id).map(|post| post.id.clone()).collect();
+    let moved: Vec<PostId> = doc
+        .posts
+        .iter()
+        .filter(|post| &post.category == id)
+        .map(|post| post.id.clone())
+        .collect();
     for post in &moved {
         set_post_category(doc, post, &fallback);
     }
-    let photos: Vec<PhotoId> = doc.photos.iter().filter(|(_, meta)| meta.category.as_ref() == Some(id)).map(|(photo, _)| photo.clone()).collect();
+    let photos: Vec<PhotoId> = doc
+        .photos
+        .iter()
+        .filter(|(_, meta)| meta.category.as_ref() == Some(id))
+        .map(|(photo, _)| photo.clone())
+        .collect();
     update_meta(doc, &photos, |meta| meta.category = None);
 }
 

@@ -11,7 +11,10 @@ use std::sync::Arc;
 use tgprep_model::doc::{Doc, PhotoId};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{File, FileSystemDirectoryHandle, FileSystemFileHandle, FileSystemGetFileOptions, FileSystemHandle, FileSystemHandleKind, FileSystemWritableFileStream};
+use web_sys::{
+    File, FileSystemDirectoryHandle, FileSystemFileHandle, FileSystemGetFileOptions,
+    FileSystemHandle, FileSystemHandleKind, FileSystemWritableFileStream,
+};
 
 const STATE_FILE: &str = ".tgprep.json";
 pub const EXPORT_DIR: &str = "tgprep-export";
@@ -34,12 +37,23 @@ fn handles() -> KeyValueStore {
 }
 
 pub async fn load_recent_folders() -> Vec<RecentFolder> {
-    let Ok(stored) = handles().get("recent").await.and_then(JsCast::dyn_into::<Array>) else { return Vec::new() };
+    let Ok(stored) = handles()
+        .get("recent")
+        .await
+        .and_then(JsCast::dyn_into::<Array>)
+    else {
+        return Vec::new();
+    };
     stored
         .iter()
         .filter_map(|entry| {
-            let name = Reflect::get(&entry, &JsValue::from_str("name")).ok()?.as_string()?;
-            let handle = Reflect::get(&entry, &JsValue::from_str("handle")).ok()?.dyn_into().ok()?;
+            let name = Reflect::get(&entry, &JsValue::from_str("name"))
+                .ok()?
+                .as_string()?;
+            let handle = Reflect::get(&entry, &JsValue::from_str("handle"))
+                .ok()?
+                .dyn_into()
+                .ok()?;
             Some(RecentFolder { name, handle })
         })
         .collect()
@@ -66,7 +80,11 @@ async fn remember_folder(handle: &FileSystemDirectoryHandle) -> Result<(), JsVal
 }
 
 fn is_image(name: &str) -> bool {
-    name.rsplit_once('.').is_some_and(|(_, extension)| IMAGE_EXTENSIONS.iter().any(|known| extension.eq_ignore_ascii_case(known)))
+    name.rsplit_once('.').is_some_and(|(_, extension)| {
+        IMAGE_EXTENSIONS
+            .iter()
+            .any(|known| extension.eq_ignore_ascii_case(known))
+    })
 }
 
 async fn entries(directory: &FileSystemDirectoryHandle) -> Result<Vec<FileSystemHandle>, JsValue> {
@@ -107,7 +125,12 @@ async fn scan(root: &FileSystemDirectoryHandle) -> Result<Vec<PhotoFile>, JsValu
         .zip(files.iter())
         .filter_map(|((id, handle), file)| {
             let file: File = file.dyn_into().ok()?;
-            Some(PhotoFile { id, handle, size: file.size(), last_modified: file.last_modified() })
+            Some(PhotoFile {
+                id,
+                handle,
+                size: file.size(),
+                last_modified: file.last_modified(),
+            })
         })
         .collect())
 }
@@ -115,19 +138,39 @@ async fn scan(root: &FileSystemDirectoryHandle) -> Result<Vec<PhotoFile>, JsValu
 fn sort_naturally(files: &mut [PhotoFile]) {
     let options = Object::new();
     let _ = Reflect::set(&options, &JsValue::from_str("numeric"), &JsValue::TRUE);
-    let _ = Reflect::set(&options, &JsValue::from_str("sensitivity"), &JsValue::from_str("base"));
+    let _ = Reflect::set(
+        &options,
+        &JsValue::from_str("sensitivity"),
+        &JsValue::from_str("base"),
+    );
     let compare: Function = js_sys::Intl::Collator::new(&Array::new(), &options).compare();
     files.sort_by(|a, b| {
-        let order = compare.call2(&JsValue::NULL, &JsValue::from_str(a.id.as_str()), &JsValue::from_str(b.id.as_str())).ok().and_then(|order| order.as_f64()).unwrap_or(0.0);
+        let order = compare
+            .call2(
+                &JsValue::NULL,
+                &JsValue::from_str(a.id.as_str()),
+                &JsValue::from_str(b.id.as_str()),
+            )
+            .ok()
+            .and_then(|order| order.as_f64())
+            .unwrap_or(0.0);
         order.partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal)
     });
 }
 
 async fn read_doc(root: &FileSystemDirectoryHandle) -> Doc {
-    let Ok(handle) = wait::<FileSystemFileHandle>(root.get_file_handle(STATE_FILE)).await else { return Doc::default() };
-    let Ok(file) = wait::<File>(handle.get_file()).await else { return Doc::default() };
-    let Ok(text) = settle(file.text()).await else { return Doc::default() };
-    text.as_string().and_then(|text| Doc::parse(&text).ok()).unwrap_or_default()
+    let Ok(handle) = wait::<FileSystemFileHandle>(root.get_file_handle(STATE_FILE)).await else {
+        return Doc::default();
+    };
+    let Ok(file) = wait::<File>(handle.get_file()).await else {
+        return Doc::default();
+    };
+    let Ok(text) = settle(file.text()).await else {
+        return Doc::default();
+    };
+    text.as_string()
+        .and_then(|text| Doc::parse(&text).ok())
+        .unwrap_or_default()
 }
 
 struct Saver {
@@ -139,10 +182,13 @@ struct Saver {
 }
 
 async fn write_state(root: &FileSystemDirectoryHandle, doc: &Doc) -> Result<(), JsValue> {
-    let text = doc.to_json().map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let text = doc
+        .to_json()
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let options = FileSystemGetFileOptions::new();
     options.set_create(true);
-    let handle: FileSystemFileHandle = wait(root.get_file_handle_with_options(STATE_FILE, &options)).await?;
+    let handle: FileSystemFileHandle =
+        wait(root.get_file_handle_with_options(STATE_FILE, &options)).await?;
     let writable: FileSystemWritableFileStream = wait(handle.create_writable()).await?;
     settle(writable.write_with_str(&text)?).await?;
     settle(writable.close()).await.map(drop)
@@ -165,7 +211,8 @@ fn drain_writes() {
     };
     spawn_local(async move {
         let _ = write_state(&root, &doc).await;
-        let current = SAVER.with_borrow(|saver| saver.as_ref().is_some_and(|saver| saver.root == root));
+        let current =
+            SAVER.with_borrow(|saver| saver.as_ref().is_some_and(|saver| saver.root == root));
         if current {
             drain_writes();
         }
@@ -188,7 +235,10 @@ pub fn watch_saves() {
     Effect::new(move |_| {
         let doc = store().doc.get();
         SAVER.with_borrow_mut(|saver| {
-            if let Some(saver) = saver.as_mut().filter(|saver| !Arc::ptr_eq(&saver.saved, &doc)) {
+            if let Some(saver) = saver
+                .as_mut()
+                .filter(|saver| !Arc::ptr_eq(&saver.saved, &doc))
+            {
                 saver.timer = Some(Timeout::new(SAVE_DELAY_MS, move || flush(doc)));
             }
         });
@@ -205,11 +255,26 @@ pub async fn open_folder(root: FileSystemDirectoryHandle) -> Result<bool, JsValu
     sort_naturally(&mut files);
     reset_thumbs();
     let files: Vec<Rc<PhotoFile>> = files.into_iter().map(Rc::new).collect();
-    let by_id: HashMap<PhotoId, Rc<PhotoFile>> = files.iter().map(|file| (file.id.clone(), file.clone())).collect();
-    store().library.set(Some(Rc::new(Library { root: root.clone(), files, by_id })));
+    let by_id: HashMap<PhotoId, Rc<PhotoFile>> = files
+        .iter()
+        .map(|file| (file.id.clone(), file.clone()))
+        .collect();
+    store().library.set(Some(Rc::new(Library {
+        root: root.clone(),
+        files,
+        by_id,
+    })));
     reset_doc(doc);
     let saved = store().doc.get_untracked();
-    SAVER.with_borrow_mut(|saver| *saver = Some(Saver { root: root.clone(), saved, timer: None, writing: false, queued: None }));
+    SAVER.with_borrow_mut(|saver| {
+        *saver = Some(Saver {
+            root: root.clone(),
+            saved,
+            timer: None,
+            writing: false,
+            queued: None,
+        })
+    });
     remember_folder(&root).await?;
     Ok(true)
 }

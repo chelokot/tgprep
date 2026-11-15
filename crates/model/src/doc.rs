@@ -136,8 +136,13 @@ impl<'de> Deserialize<'de> for Adjustments {
             fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Adjustments, A::Error> {
                 let mut values = [None; 13];
                 while let Some(key) = map.next_key::<String>()? {
-                    match Adjustment::ALL.iter().find(|adjustment| adjustment.key() == key) {
-                        Some(adjustment) => values[*adjustment as usize] = Some(map.next_value::<f64>()?),
+                    match Adjustment::ALL
+                        .iter()
+                        .find(|adjustment| adjustment.key() == key)
+                    {
+                        Some(adjustment) => {
+                            values[*adjustment as usize] = Some(map.next_value::<f64>()?)
+                        }
                         None => {
                             map.next_value::<de::IgnoredAny>()?;
                         }
@@ -145,8 +150,8 @@ impl<'de> Deserialize<'de> for Adjustments {
                 }
                 let mut adjustments = Adjustments::default();
                 for adjustment in Adjustment::ALL {
-                    adjustments[adjustment] =
-                        values[adjustment as usize].ok_or_else(|| de::Error::missing_field(adjustment.key()))?;
+                    adjustments[adjustment] = values[adjustment as usize]
+                        .ok_or_else(|| de::Error::missing_field(adjustment.key()))?;
                 }
                 Ok(adjustments)
             }
@@ -165,7 +170,12 @@ pub struct Crop {
 }
 
 impl Crop {
-    pub const FULL: Self = Self { x: 0.0, y: 0.0, w: 1.0, h: 1.0 };
+    pub const FULL: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+    };
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -286,7 +296,14 @@ pub struct Edits {
 
 impl Default for Edits {
     fn default() -> Self {
-        Self { crop: Crop::FULL, aspect: Aspect::Free, angle: 0.0, quarter: Quarter::None, flip: false, adjust: Adjustments::default() }
+        Self {
+            crop: Crop::FULL,
+            aspect: Aspect::Free,
+            angle: 0.0,
+            quarter: Quarter::None,
+            flip: false,
+            adjust: Adjustments::default(),
+        }
     }
 }
 
@@ -349,7 +366,11 @@ impl TryFrom<u8> for FormatVersion {
     type Error = UnsupportedVersion;
 
     fn try_from(value: u8) -> Result<Self, UnsupportedVersion> {
-        if value == 1 { Ok(Self) } else { Err(UnsupportedVersion(value)) }
+        if value == 1 {
+            Ok(Self)
+        } else {
+            Err(UnsupportedVersion(value))
+        }
     }
 }
 
@@ -389,14 +410,33 @@ impl TryFrom<RawDoc> for Doc {
         if raw.categories.is_empty() {
             return Err(NoCategories);
         }
-        Ok(Self { app: raw.app, version: raw.version, categories: raw.categories, posts: raw.posts, photos: raw.photos })
+        Ok(Self {
+            app: raw.app,
+            version: raw.version,
+            categories: raw.categories,
+            posts: raw.posts,
+            photos: raw.photos,
+        })
     }
 }
 
-pub const CATEGORY_COLORS: [&str; 6] = ["#3390ec", "#e5487d", "#30a46c", "#f5a524", "#8e4ec6", "#12a594"];
+pub const CATEGORY_COLORS: [&str; 6] = [
+    "#3390ec", "#e5487d", "#30a46c", "#f5a524", "#8e4ec6", "#12a594",
+];
 
-static DEFAULT_META: PhotoMeta =
-    PhotoMeta { checked: false, archived: false, category: None, edits: Edits { crop: Crop::FULL, aspect: Aspect::Free, angle: 0.0, quarter: Quarter::None, flip: false, adjust: Adjustments([0.0; 13]) } };
+static DEFAULT_META: PhotoMeta = PhotoMeta {
+    checked: false,
+    archived: false,
+    category: None,
+    edits: Edits {
+        crop: Crop::FULL,
+        aspect: Aspect::Free,
+        angle: 0.0,
+        quarter: Quarter::None,
+        flip: false,
+        adjust: Adjustments([0.0; 13]),
+    },
+};
 
 impl Default for Doc {
     fn default() -> Self {
@@ -404,8 +444,16 @@ impl Default for Doc {
             app: App::Tgprep,
             version: FormatVersion,
             categories: vec![
-                Category { id: CategoryId("friends".into()), name: "Друзьям".into(), color: CATEGORY_COLORS[0].into() },
-                Category { id: CategoryId("family".into()), name: "Маме".into(), color: CATEGORY_COLORS[1].into() },
+                Category {
+                    id: CategoryId("friends".into()),
+                    name: "Друзьям".into(),
+                    color: CATEGORY_COLORS[0].into(),
+                },
+                Category {
+                    id: CategoryId("family".into()),
+                    name: "Маме".into(),
+                    color: CATEGORY_COLORS[1].into(),
+                },
             ],
             posts: Vec::new(),
             photos: IndexMap::new(),
@@ -435,7 +483,10 @@ impl Doc {
     }
 
     pub fn photo_category(&self, id: &PhotoId) -> &CategoryId {
-        self.meta(id).category.as_ref().unwrap_or(&self.first_category().id)
+        self.meta(id)
+            .category
+            .as_ref()
+            .unwrap_or(&self.first_category().id)
     }
 
     pub fn post(&self, id: &PostId) -> Option<&Post> {

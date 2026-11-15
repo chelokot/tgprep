@@ -2,7 +2,10 @@ use std::fmt::Write;
 use tgprep_model::doc::{Adjustment, Crop, Edits};
 use tgprep_model::geometry::{Size, output_to_source_uv};
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, ImageBitmap, OffscreenCanvas, WebGl2RenderingContext as Gl, WebGlProgram, WebGlShader, WebGlUniformLocation};
+use web_sys::{
+    HtmlCanvasElement, ImageBitmap, OffscreenCanvas, WebGl2RenderingContext as Gl, WebGlProgram,
+    WebGlShader, WebGlUniformLocation,
+};
 
 const VERTEX_SHADER: &str = "#version 300 es
 in vec2 position;
@@ -61,7 +64,11 @@ fn fragment_shader() -> String {
         Adjustment::ALL.len()
     );
     for (index, adjustment) in Adjustment::ALL.iter().enumerate() {
-        let _ = writeln!(source, "#define {} adjust[{index}]", adjustment.key().to_uppercase());
+        let _ = writeln!(
+            source,
+            "#define {} adjust[{index}]",
+            adjustment.key().to_uppercase()
+        );
     }
     source.push_str(FRAGMENT_BODY);
     source
@@ -76,8 +83,16 @@ pub enum Canvas {
 impl Canvas {
     fn context(&self) -> Result<Option<js_sys::Object>, JsValue> {
         let options = js_sys::Object::new();
-        for (name, value) in [("premultipliedAlpha", false), ("preserveDrawingBuffer", true), ("antialias", false)] {
-            let _ = js_sys::Reflect::set(&options, &JsValue::from_str(name), &JsValue::from_bool(value));
+        for (name, value) in [
+            ("premultipliedAlpha", false),
+            ("preserveDrawingBuffer", true),
+            ("antialias", false),
+        ] {
+            let _ = js_sys::Reflect::set(
+                &options,
+                &JsValue::from_str(name),
+                &JsValue::from_bool(value),
+            );
         }
         match self {
             Self::Element(canvas) => canvas.get_context_with_context_options("webgl2", &options),
@@ -115,37 +130,63 @@ pub struct Renderer {
 }
 
 fn compile(gl: &Gl, kind: u32, code: &str) -> Result<WebGlShader, JsValue> {
-    let shader = gl.create_shader(kind).ok_or_else(|| JsValue::from_str("shader"))?;
+    let shader = gl
+        .create_shader(kind)
+        .ok_or_else(|| JsValue::from_str("shader"))?;
     gl.shader_source(&shader, code);
     gl.compile_shader(&shader);
-    if gl.get_shader_parameter(&shader, Gl::COMPILE_STATUS).as_bool() == Some(true) {
+    if gl
+        .get_shader_parameter(&shader, Gl::COMPILE_STATUS)
+        .as_bool()
+        == Some(true)
+    {
         Ok(shader)
     } else {
-        Err(JsValue::from_str(&gl.get_shader_info_log(&shader).unwrap_or_else(|| "shader".into())))
+        Err(JsValue::from_str(
+            &gl.get_shader_info_log(&shader)
+                .unwrap_or_else(|| "shader".into()),
+        ))
     }
 }
 
 fn locate(gl: &Gl, program: &WebGlProgram, name: &str) -> Result<WebGlUniformLocation, JsValue> {
-    gl.get_uniform_location(program, name).ok_or_else(|| JsValue::from_str(name))
+    gl.get_uniform_location(program, name)
+        .ok_or_else(|| JsValue::from_str(name))
 }
 
-#[expect(clippy::cast_possible_truncation, reason = "WebGL takes single precision")]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "WebGL takes single precision"
+)]
 fn single(value: f64) -> f32 {
     value as f32
 }
 
 impl Renderer {
     pub fn new(canvas: Canvas) -> Result<Self, JsValue> {
-        let gl: Gl = canvas.context()?.ok_or_else(|| JsValue::from_str("WebGL2 is not available"))?.dyn_into()?;
-        let program = gl.create_program().ok_or_else(|| JsValue::from_str("program"))?;
+        let gl: Gl = canvas
+            .context()?
+            .ok_or_else(|| JsValue::from_str("WebGL2 is not available"))?
+            .dyn_into()?;
+        let program = gl
+            .create_program()
+            .ok_or_else(|| JsValue::from_str("program"))?;
         gl.attach_shader(&program, &compile(&gl, Gl::VERTEX_SHADER, VERTEX_SHADER)?);
-        gl.attach_shader(&program, &compile(&gl, Gl::FRAGMENT_SHADER, &fragment_shader())?);
+        gl.attach_shader(
+            &program,
+            &compile(&gl, Gl::FRAGMENT_SHADER, &fragment_shader())?,
+        );
         gl.link_program(&program);
         gl.use_program(Some(&program));
 
         gl.bind_buffer(Gl::ARRAY_BUFFER, gl.create_buffer().as_ref());
-        gl.buffer_data_with_array_buffer_view(Gl::ARRAY_BUFFER, &js_sys::Float32Array::from(&[-1.0_f32, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0][..]), Gl::STATIC_DRAW);
-        let position = u32::try_from(gl.get_attrib_location(&program, "position")).map_err(|_| JsValue::from_str("position"))?;
+        gl.buffer_data_with_array_buffer_view(
+            Gl::ARRAY_BUFFER,
+            &js_sys::Float32Array::from(&[-1.0_f32, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0][..]),
+            Gl::STATIC_DRAW,
+        );
+        let position = u32::try_from(gl.get_attrib_location(&program, "position"))
+            .map_err(|_| JsValue::from_str("position"))?;
         gl.enable_vertex_attrib_array(position);
         gl.vertex_attrib_pointer_with_i32(position, 2, Gl::FLOAT, false, 0, 0);
 
@@ -165,27 +206,66 @@ impl Renderer {
             background: locate(&gl, &program, "background")?,
             adjust: locate(&gl, &program, "adjust")?,
         };
-        let max_texture_size = gl.get_parameter(Gl::MAX_TEXTURE_SIZE)?.as_f64().unwrap_or(4096.0);
-        Ok(Self { gl, locations, uploaded: None, max_texture_size, canvas })
+        let max_texture_size = gl
+            .get_parameter(Gl::MAX_TEXTURE_SIZE)?
+            .as_f64()
+            .unwrap_or(4096.0);
+        Ok(Self {
+            gl,
+            locations,
+            uploaded: None,
+            max_texture_size,
+            canvas,
+        })
     }
 
-    pub fn render(&mut self, source: &ImageBitmap, edits: &Edits, crop: Crop, output: (u32, u32)) -> Result<(), JsValue> {
+    pub fn render(
+        &mut self,
+        source: &ImageBitmap,
+        edits: &Edits,
+        crop: Crop,
+        output: (u32, u32),
+    ) -> Result<(), JsValue> {
         let gl = &self.gl;
         if self.uploaded.as_ref() != Some(source) {
             #[expect(clippy::cast_possible_wrap, reason = "WebGL enums fit in i32")]
-            gl.tex_image_2d_with_u32_and_u32_and_image_bitmap(Gl::TEXTURE_2D, 0, Gl::RGBA as i32, Gl::RGBA, Gl::UNSIGNED_BYTE, source)?;
+            gl.tex_image_2d_with_u32_and_u32_and_image_bitmap(
+                Gl::TEXTURE_2D,
+                0,
+                Gl::RGBA as i32,
+                Gl::RGBA,
+                Gl::UNSIGNED_BYTE,
+                source,
+            )?;
             gl.generate_mipmap(Gl::TEXTURE_2D);
             self.uploaded = Some(source.clone());
         }
         self.canvas.resize(output.0, output.1);
         #[expect(clippy::cast_possible_wrap, reason = "canvas sizes fit in i32")]
         gl.viewport(0, 0, output.0 as i32, output.1 as i32);
-        let matrix = output_to_source_uv(Size { w: f64::from(source.width()), h: f64::from(source.height()) }, edits, crop);
-        let values = [matrix.a, matrix.b, 0.0, matrix.c, matrix.d, 0.0, matrix.e, matrix.f, 1.0].map(single);
+        let matrix = output_to_source_uv(
+            Size {
+                w: f64::from(source.width()),
+                h: f64::from(source.height()),
+            },
+            edits,
+            crop,
+        );
+        let values = [
+            matrix.a, matrix.b, 0.0, matrix.c, matrix.d, 0.0, matrix.e, matrix.f, 1.0,
+        ]
+        .map(single);
         gl.uniform_matrix3fv_with_f32_array(Some(&self.locations.output_to_source), false, &values);
-        gl.uniform2f(Some(&self.locations.output_size), single(f64::from(output.0)), single(f64::from(output.1)));
+        gl.uniform2f(
+            Some(&self.locations.output_size),
+            single(f64::from(output.0)),
+            single(f64::from(output.1)),
+        );
         gl.uniform4fv_with_f32_array(Some(&self.locations.background), &[0.0; 4]);
-        gl.uniform1fv_with_f32_array(Some(&self.locations.adjust), &edits.adjust.values().map(|value| single(value / 100.0)));
+        gl.uniform1fv_with_f32_array(
+            Some(&self.locations.adjust),
+            &edits.adjust.values().map(|value| single(value / 100.0)),
+        );
         gl.draw_arrays(Gl::TRIANGLE_STRIP, 0, 4);
         Ok(())
     }

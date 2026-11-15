@@ -18,10 +18,18 @@ pub fn IconButton(
     #[prop(default = Tone::Plain)] tone: Tone,
 ) -> impl IntoView {
     let class = move || match (tone, active.get()) {
-        (Tone::Overlay, true) => "grid size-8 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-30 bg-accent text-white",
-        (Tone::Overlay, false) => "grid size-8 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-30 text-white/80 hover:bg-white/15 hover:text-white",
-        (Tone::Plain, true) => "grid size-8 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-30 bg-accent/15 text-accent",
-        (Tone::Plain, false) => "grid size-8 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-30 text-muted hover:bg-raised hover:text-fg",
+        (Tone::Overlay, true) => {
+            "grid size-8 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-30 bg-accent text-white"
+        }
+        (Tone::Overlay, false) => {
+            "grid size-8 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-30 text-white/80 hover:bg-white/15 hover:text-white"
+        }
+        (Tone::Plain, true) => {
+            "grid size-8 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-30 bg-accent/15 text-accent"
+        }
+        (Tone::Plain, false) => {
+            "grid size-8 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-30 text-muted hover:bg-raised hover:text-fg"
+        }
     };
     view! {
         <button
@@ -85,7 +93,11 @@ pub struct Choice<T> {
 }
 
 #[component]
-pub fn Segmented<T: Copy + PartialEq + Send + Sync + 'static>(#[prop(into)] value: Signal<T>, choices: Vec<Choice<T>>, #[prop(into)] on_change: Callback<T>) -> impl IntoView {
+pub fn Segmented<T: Copy + PartialEq + Send + Sync + 'static>(
+    #[prop(into)] value: Signal<T>,
+    choices: Vec<Choice<T>>,
+    #[prop(into)] on_change: Callback<T>,
+) -> impl IntoView {
     view! {
         <div class="flex shrink-0 rounded-lg bg-raised p-0.5">
             {choices

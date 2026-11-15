@@ -12,7 +12,10 @@ use tgprep_model::geometry::{Size, fit_within, output_size};
 use tgprep_worker::{Job, Request, Response, Thumbnail};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{Blob, File, ImageBitmap, ImageEncodeOptions, MessageEvent, OffscreenCanvas, Url, Worker, WorkerOptions, WorkerType};
+use web_sys::{
+    Blob, File, ImageBitmap, ImageEncodeOptions, MessageEvent, OffscreenCanvas, Url, Worker,
+    WorkerOptions, WorkerType,
+};
 
 const THUMB_LONG_SIDE: f64 = 720.0;
 const EDITED_DELAY_MS: i32 = 250;
@@ -53,7 +56,11 @@ thread_local! {
 }
 
 pub fn spawn_worker(on_message: impl Fn(&Worker, Response) + 'static) -> Option<Worker> {
-    let script = document().query_selector("meta[name=tgprep-worker]").ok().flatten()?.get_attribute("content")?;
+    let script = document()
+        .query_selector("meta[name=tgprep-worker]")
+        .ok()
+        .flatten()?
+        .get_attribute("content")?;
     let options = WorkerOptions::new();
     options.set_type(WorkerType::Module);
     let worker = Worker::new_with_options(&script, &options).ok()?;
@@ -73,7 +80,12 @@ fn cache_key(file: &PhotoFile) -> String {
 }
 
 fn signal(id: &PhotoId) -> ArcRwSignal<Option<Thumb>> {
-    THUMBS.with_borrow_mut(|thumbs| thumbs.entry(id.clone()).or_insert_with(|| ArcRwSignal::new(None)).clone())
+    THUMBS.with_borrow_mut(|thumbs| {
+        thumbs
+            .entry(id.clone())
+            .or_insert_with(|| ArcRwSignal::new(None))
+            .clone()
+    })
 }
 
 fn publish(id: PhotoId, thumb: Thumb) {
@@ -97,21 +109,39 @@ fn store_thumb(id: PhotoId, thumbnail: Option<&Thumbnail>) {
     let thumb = thumbnail.and_then(|thumbnail| {
         let url = Url::create_object_url_with_blob(&thumbnail.blob).ok()?;
         BLOBS.with_borrow_mut(|blobs| blobs.insert(id.clone(), thumbnail.blob.clone()));
-        Some(Thumb::Ready { url, size: Size { w: thumbnail.width, h: thumbnail.height } })
+        Some(Thumb::Ready {
+            url,
+            size: Size {
+                w: thumbnail.width,
+                h: thumbnail.height,
+            },
+        })
     });
     publish(id, thumb.unwrap_or(Thumb::Failed));
 }
 
 fn cached_thumbnail(value: &JsValue) -> Option<Thumbnail> {
     let field = |name: &str| Reflect::get(value, &JsValue::from_str(name)).ok();
-    Some(Thumbnail { blob: field("blob")?.dyn_into().ok()?, width: field("w")?.as_f64()?, height: field("h")?.as_f64()? })
+    Some(Thumbnail {
+        blob: field("blob")?.dyn_into().ok()?,
+        width: field("w")?.as_f64()?,
+        height: field("h")?.as_f64()?,
+    })
 }
 
 fn cache_entry(thumbnail: &Thumbnail) -> JsValue {
     let entry = Object::new();
     let _ = Reflect::set(&entry, &JsValue::from_str("blob"), &thumbnail.blob);
-    let _ = Reflect::set(&entry, &JsValue::from_str("w"), &JsValue::from_f64(thumbnail.width));
-    let _ = Reflect::set(&entry, &JsValue::from_str("h"), &JsValue::from_f64(thumbnail.height));
+    let _ = Reflect::set(
+        &entry,
+        &JsValue::from_str("w"),
+        &JsValue::from_f64(thumbnail.width),
+    );
+    let _ = Reflect::set(
+        &entry,
+        &JsValue::from_str("h"),
+        &JsValue::from_f64(thumbnail.height),
+    );
     entry.into()
 }
 
@@ -124,13 +154,26 @@ fn pump() {
             let file = pool.queue.pop()?;
             let worker = pool.idle.pop()?;
             let key = cache_key(&file);
-            pool.in_flight.insert(key.clone(), (file.id.clone(), worker.clone(), pool.generation));
+            pool.in_flight.insert(
+                key.clone(),
+                (file.id.clone(), worker.clone(), pool.generation),
+            );
             Some((file, worker, key))
         });
-        let Some((file, worker, key)) = next else { return };
+        let Some((file, worker, key)) = next else {
+            return;
+        };
         spawn_local(async move {
             if let Ok(data) = wait::<File>(file.handle.get_file()).await {
-                let _ = worker.post_message(&Request { job: Job::Thumb, key, file: data, long_side: THUMB_LONG_SIDE }.to_js());
+                let _ = worker.post_message(
+                    &Request {
+                        job: Job::Thumb,
+                        key,
+                        file: data,
+                        long_side: THUMB_LONG_SIDE,
+                    }
+                    .to_js(),
+                );
             }
         });
     }
@@ -149,7 +192,10 @@ fn received(worker: &Worker, response: Response) {
                 store_thumb(id, thumbnail.as_ref());
                 if let Some(thumbnail) = thumbnail {
                     spawn_local(async move {
-                        let _ = CACHE.with(Clone::clone).set(&key, &cache_entry(&thumbnail)).await;
+                        let _ = CACHE
+                            .with(Clone::clone)
+                            .set(&key, &cache_entry(&thumbnail))
+                            .await;
                     });
                 }
             }
@@ -174,7 +220,12 @@ fn request_thumb(file: Rc<PhotoFile>) {
         return;
     }
     spawn_local(async move {
-        let cached = CACHE.with(Clone::clone).get(&cache_key(&file)).await.ok().and_then(|value| cached_thumbnail(&value));
+        let cached = CACHE
+            .with(Clone::clone)
+            .get(&cache_key(&file))
+            .await
+            .ok()
+            .and_then(|value| cached_thumbnail(&value));
         if let Some(thumbnail) = cached {
             store_thumb(file.id.clone(), Some(&thumbnail));
             return;
@@ -195,7 +246,11 @@ pub fn reset_thumbs() {
 }
 
 pub fn base_thumb(id: &PhotoId) -> ArcRwSignal<Option<Thumb>> {
-    let file = store().library.with_untracked(|library| library.as_ref().and_then(|library| library.by_id.get(id).cloned()));
+    let file = store().library.with_untracked(|library| {
+        library
+            .as_ref()
+            .and_then(|library| library.by_id.get(id).cloned())
+    });
     if let Some(file) = file {
         request_thumb(file);
     }
@@ -203,14 +258,19 @@ pub fn base_thumb(id: &PhotoId) -> ArcRwSignal<Option<Thumb>> {
 }
 
 pub fn thumb_url(id: &PhotoId) -> Option<String> {
-    THUMBS.with_borrow(|thumbs| match thumbs.get(id).and_then(|thumb| thumb.get_untracked()) {
-        Some(Thumb::Ready { url, .. }) => Some(url),
-        _ => None,
-    })
+    THUMBS.with_borrow(
+        |thumbs| match thumbs.get(id).and_then(|thumb| thumb.get_untracked()) {
+            Some(Thumb::Ready { url, .. }) => Some(url),
+            _ => None,
+        },
+    )
 }
 
 fn edit_key(id: &PhotoId, edits: &Edits) -> String {
-    format!("{id}|{}", tgprep_model::json::stringify(edits).unwrap_or_default())
+    format!(
+        "{id}|{}",
+        tgprep_model::json::stringify(edits).unwrap_or_default()
+    )
 }
 
 async fn render_edited(id: PhotoId, size: Size, edits: Edits, key: String) -> Option<String> {
@@ -219,13 +279,21 @@ async fn render_edited(id: PhotoId, size: Size, edits: Edits, key: String) -> Op
         return Some(url);
     }
     let blob = BLOBS.with_borrow(|blobs| blobs.get(&id).cloned())?;
-    let bitmap: ImageBitmap = wait(window().create_image_bitmap_with_blob(&blob).ok()?).await.ok()?;
+    let bitmap: ImageBitmap = wait(window().create_image_bitmap_with_blob(&blob).ok()?)
+        .await
+        .ok()?;
     let target = fit_within(output_size(size, &edits), THUMB_LONG_SIDE);
-    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "rounded thumbnail sizes")]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "rounded thumbnail sizes"
+    )]
     let output = (target.w as u32, target.h as u32);
     let canvas = RENDERER.with_borrow_mut(|renderer| {
         if renderer.is_none() {
-            *renderer = OffscreenCanvas::new(1, 1).ok().and_then(|canvas| Renderer::new(Canvas::Offscreen(canvas)).ok());
+            *renderer = OffscreenCanvas::new(1, 1)
+                .ok()
+                .and_then(|canvas| Renderer::new(Canvas::Offscreen(canvas)).ok());
         }
         let renderer = renderer.as_mut()?;
         renderer.render(&bitmap, &edits, edits.crop, output).ok()?;
@@ -270,7 +338,9 @@ pub fn display_thumb(id: PhotoId) -> Memo<Option<DisplayThumb>> {
     let watched = base.clone();
     Effect::new(move |_: Option<Option<PendingRender>>| {
         let edits = edits.get();
-        let Some(Thumb::Ready { size, .. }) = watched.get() else { return None };
+        let Some(Thumb::Ready { size, .. }) = watched.get() else {
+            return None;
+        };
         if !edits.is_edited() {
             return None;
         }
@@ -290,17 +360,30 @@ pub fn display_thumb(id: PhotoId) -> Memo<Option<DisplayThumb>> {
                 }
             });
         });
-        Some(PendingRender { _timer: timer, cancelled })
+        Some(PendingRender {
+            _timer: timer,
+            cancelled,
+        })
     });
     Memo::new(move |_| {
         let edits = edits.get();
         let edited = edits.is_edited();
         match base.get()? {
-            Thumb::Failed => Some(DisplayThumb { url: None, aspect: 1.0, edited, failed: true }),
+            Thumb::Failed => Some(DisplayThumb {
+                url: None,
+                aspect: 1.0,
+                edited,
+                failed: true,
+            }),
             Thumb::Ready { url, size } => {
                 let output = output_size(size, &edits);
                 let url = if edited { rendered.get() } else { Some(url) };
-                Some(DisplayThumb { url, aspect: output.w / output.h, edited, failed: false })
+                Some(DisplayThumb {
+                    url,
+                    aspect: output.w / output.h,
+                    edited,
+                    failed: false,
+                })
             }
         }
     })

@@ -2,7 +2,10 @@ use crate::browser::rem_px;
 use crate::dnd::{ClickModifiers, DragPayload, press_to_drag};
 use crate::i18n::{fill, t};
 use crate::icons::{self, stroked, svg};
-use crate::store::{CategoryFilter, LibraryLayout, LibrarySort, Settings, ViewKey, clear_selection, commit, new_id, open_viewer, reveal_photo, store};
+use crate::store::{
+    CategoryFilter, LibraryLayout, LibrarySort, Settings, ViewKey, clear_selection, commit, new_id,
+    open_viewer, reveal_photo, store,
+};
 use crate::thumbs::display_thumb;
 use crate::tile::{Fit, TileProps, tile};
 use crate::ui::{Chip, Choice, IconButton, Label, PaneHeader, RangeInput, Segmented};
@@ -25,9 +28,20 @@ fn update(change: impl FnOnce(&mut Settings)) {
 
 fn select_from(visible: &[PhotoId], id: &PhotoId, modifiers: ClickModifiers) {
     store().selection.update(|selection| {
-        let anchor = selection.anchor.as_ref().and_then(|anchor| visible.iter().position(|candidate| candidate == anchor));
-        if let (true, Some(anchor), Some(clicked)) = (modifiers.range, anchor, visible.iter().position(|candidate| candidate == id)) {
-            selection.ids.extend(visible[anchor.min(clicked)..=anchor.max(clicked)].iter().cloned());
+        let anchor = selection
+            .anchor
+            .as_ref()
+            .and_then(|anchor| visible.iter().position(|candidate| candidate == anchor));
+        if let (true, Some(anchor), Some(clicked)) = (
+            modifiers.range,
+            anchor,
+            visible.iter().position(|candidate| candidate == id),
+        ) {
+            selection.ids.extend(
+                visible[anchor.min(clicked)..=anchor.max(clicked)]
+                    .iter()
+                    .cloned(),
+            );
             return;
         }
         if !selection.ids.remove(id) {
@@ -42,10 +56,17 @@ fn CategoryMark(id: PhotoId) -> impl IntoView {
     let mark = Memo::new(move |_| {
         store().doc.with(|doc| {
             let current = doc.photo_category(&id);
-            (current != &doc.first_category().id).then(|| doc.category(current).map(|category| (category.name.clone(), category.color.clone()))).flatten()
+            (current != &doc.first_category().id)
+                .then(|| {
+                    doc.category(current)
+                        .map(|category| (category.name.clone(), category.color.clone()))
+                })
+                .flatten()
         })
     });
-    move || mark.get().map(|(name, color)| view! { <span title=name style:background-color=color class="size-3 shrink-0 rounded-full ring-2 ring-white/90"></span> })
+    move || {
+        mark.get().map(|(name, color)| view! { <span title=name style:background-color=color class="size-3 shrink-0 rounded-full ring-2 ring-white/90"></span> })
+    }
 }
 
 #[component]
@@ -58,7 +79,20 @@ fn PlacementBadges(id: PhotoId) -> impl IntoView {
             store.doc.with(|doc| {
                 placements
                     .get(&id)
-                    .map(|indexes| indexes.iter().map(|index| (*index, doc.posts.get(*index).and_then(|post| doc.category(&post.category)).map(|category| category.color.clone()))).collect::<Vec<_>>())
+                    .map(|indexes| {
+                        indexes
+                            .iter()
+                            .map(|index| {
+                                (
+                                    *index,
+                                    doc.posts
+                                        .get(*index)
+                                        .and_then(|post| doc.category(&post.category))
+                                        .map(|category| category.color.clone()),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
                     .unwrap_or_default()
             })
         }
@@ -106,7 +140,11 @@ fn local_date(milliseconds: f64) -> String {
 }
 
 #[component]
-fn LibraryTile(id: PhotoId, visible: Memo<Arc<Vec<PhotoId>>>, layout: LibraryLayout) -> impl IntoView {
+fn LibraryTile(
+    id: PhotoId,
+    visible: Memo<Arc<Vec<PhotoId>>>,
+    layout: LibraryLayout,
+) -> impl IntoView {
     let store = store();
     let thumb = display_thumb(id.clone());
     let pressed = id.clone();
@@ -118,12 +156,21 @@ fn LibraryTile(id: PhotoId, visible: Memo<Arc<Vec<PhotoId>>>, layout: LibraryLay
             move || {
                 let ids = store.selection.with_untracked(|selection| {
                     if selection.ids.contains(&dragged) {
-                        visible.with_untracked(|visible| visible.iter().filter(|candidate| selection.ids.contains(candidate)).cloned().collect())
+                        visible.with_untracked(|visible| {
+                            visible
+                                .iter()
+                                .filter(|candidate| selection.ids.contains(candidate))
+                                .cloned()
+                                .collect()
+                        })
                     } else {
                         vec![dragged]
                     }
                 });
-                DragPayload::Photos { ids, from_post: None }
+                DragPayload::Photos {
+                    ids,
+                    from_post: None,
+                }
             },
             move |modifiers| {
                 let visible = visible.get_untracked();
@@ -135,7 +182,15 @@ fn LibraryTile(id: PhotoId, visible: Memo<Arc<Vec<PhotoId>>>, layout: LibraryLay
             },
         );
     };
-    let props = |fit, actions: bool, class| TileProps { id: id.clone(), view: ViewKey::Library, thumb, fit, actions: Signal::stored(actions), class, style: None };
+    let props = |fit, actions: bool, class| TileProps {
+        id: id.clone(),
+        view: ViewKey::Library,
+        thumb,
+        fit,
+        actions: Signal::stored(actions),
+        class,
+        style: None,
+    };
     match layout {
         LibraryLayout::Grid => tile(
             props(Fit::Contain, true, "size-full"),
@@ -149,8 +204,19 @@ fn LibraryTile(id: PhotoId, visible: Memo<Arc<Vec<PhotoId>>>, layout: LibraryLay
         )
         .into_any(),
         LibraryLayout::List => {
-            let file = store.library.with_untracked(|library| library.as_ref().and_then(|library| library.by_id.get(&id).cloned()));
-            let details = file.map(|file| (format!("{:.1}", file.size / 1_048_576.0), local_date(file.last_modified))).unwrap_or_default();
+            let file = store.library.with_untracked(|library| {
+                library
+                    .as_ref()
+                    .and_then(|library| library.by_id.get(&id).cloned())
+            });
+            let details = file
+                .map(|file| {
+                    (
+                        format!("{:.1}", file.size / 1_048_576.0),
+                        local_date(file.last_modified),
+                    )
+                })
+                .unwrap_or_default();
             view! {
                 <div class="flex h-full items-center gap-3 rounded-lg px-1 hover:bg-raised/60">
                     {tile(props(Fit::Cover, false, "aspect-square h-[calc(100%-0.5rem)]"), on_pointer_down, ())}
@@ -176,18 +242,30 @@ pub fn Library() -> impl IntoView {
         store.doc.with(|doc| filter.active(doc))
     });
     let visible: Memo<Arc<Vec<PhotoId>>> = Memo::new(move |_| {
-        let (hide_checked, hide_placed, show_archived, sort) = settings.with(|settings| (settings.hide_checked, settings.hide_placed, settings.show_archived, settings.library_sort));
+        let (hide_checked, hide_placed, show_archived, sort) = settings.with(|settings| {
+            (
+                settings.hide_checked,
+                settings.hide_placed,
+                settings.show_archived,
+                settings.library_sort,
+            )
+        });
         let category = category.get();
         let placements = store.placements.get();
         let library = store.library.get();
-        let Some(library) = library else { return Arc::new(Vec::new()) };
+        let Some(library) = library else {
+            return Arc::new(Vec::new());
+        };
         store.doc.with(|doc| {
             let mut files: Vec<_> = library
                 .files
                 .iter()
                 .filter(|file| {
                     let meta = doc.meta(&file.id);
-                    meta.archived == show_archived && !(hide_checked && meta.checked) && category.admits(doc.photo_category(&file.id)) && !(hide_placed && placements.contains_key(&file.id))
+                    meta.archived == show_archived
+                        && !(hide_checked && meta.checked)
+                        && category.admits(doc.photo_category(&file.id))
+                        && !(hide_placed && placements.contains_key(&file.id))
                 })
                 .collect();
             if sort == LibrarySort::Date {
@@ -196,22 +274,48 @@ pub fn Library() -> impl IntoView {
             Arc::new(files.into_iter().map(|file| file.id.clone()).collect())
         })
     });
-    let total = Memo::new(move |_| store.library.with(|library| library.as_ref().map_or(0, |library| library.files.len())));
+    let total = Memo::new(move |_| {
+        store
+            .library
+            .with(|library| library.as_ref().map_or(0, |library| library.files.len()))
+    });
     let scroller = NodeRef::<Div>::new();
     let viewport = watch_viewport(scroller);
     let rem = rem_px();
     let layout = Memo::new(move |_| {
-        let (layout, zoom) = settings.with(|settings| (settings.library_layout, settings.library_zoom));
+        let (layout, zoom) =
+            settings.with(|settings| (settings.library_layout, settings.library_zoom));
         let width = viewport.width.get();
         let grid = layout == LibraryLayout::Grid;
-        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "a small column count")]
-        let columns = if grid { (((width + GAP_PX) / (zoom * rem + GAP_PX)).floor() as usize).max(1) } else { 1 };
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a small column count"
+        )]
+        let columns = if grid {
+            (((width + GAP_PX) / (zoom * rem + GAP_PX)).floor() as usize).max(1)
+        } else {
+            1
+        };
         #[expect(clippy::cast_precision_loss, reason = "a small column count")]
-        let cell = if grid { (width - GAP_PX * (columns as f64 - 1.0)) / columns as f64 } else { LIST_ROW_REM * rem };
-        (layout, columns, cell, if grid { cell + GAP_PX } else { cell })
+        let cell = if grid {
+            (width - GAP_PX * (columns as f64 - 1.0)) / columns as f64
+        } else {
+            LIST_ROW_REM * rem
+        };
+        (
+            layout,
+            columns,
+            cell,
+            if grid { cell + GAP_PX } else { cell },
+        )
     });
     let kind = Memo::new(move |_| layout.get().0);
-    let rows = Memo::new(move |_| visible.with(|visible| visible.len()).div_ceil(layout.get().1));
+    let rows = Memo::new(move |_| {
+        visible
+            .with(|visible| visible.len())
+            .div_ceil(layout.get().1)
+    });
     #[expect(clippy::cast_precision_loss, reason = "row counts are small")]
     let total_height = move || GAP_PX + rows.get() as f64 * layout.get().3 + GAP_PX * 4.0;
     let window = Memo::new(move |_| {
@@ -222,28 +326,73 @@ pub fn Library() -> impl IntoView {
         }
         let top = viewport.scroll_top.get() - GAP_PX;
         let bottom = top + viewport.height.get();
-        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "row indexes")]
-        let (first, last) = (((top / row_size).floor().max(0.0) as usize).min(count - 1), ((bottom / row_size).ceil().max(1.0) as usize - 1).min(count - 1));
-        let range = first.saturating_sub(OVERSCAN) * columns..((last + OVERSCAN + 1).min(count) * columns);
-        visible.with(|visible| visible.iter().enumerate().skip(range.start).take(range.len()).map(|(index, id)| (id.clone(), index)).collect::<Vec<_>>())
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "row indexes"
+        )]
+        let (first, last) = (
+            ((top / row_size).floor().max(0.0) as usize).min(count - 1),
+            ((bottom / row_size).ceil().max(1.0) as usize - 1).min(count - 1),
+        );
+        let range =
+            first.saturating_sub(OVERSCAN) * columns..((last + OVERSCAN + 1).min(count) * columns);
+        visible.with(|visible| {
+            visible
+                .iter()
+                .enumerate()
+                .skip(range.start)
+                .take(range.len())
+                .map(|(index, id)| (id.clone(), index))
+                .collect::<Vec<_>>()
+        })
     });
-    let positions: Memo<Arc<HashMap<PhotoId, usize>>> = Memo::new(move |_| Arc::new(visible.with(|visible| visible.iter().enumerate().map(|(index, id)| (id.clone(), index)).collect())));
+    let positions: Memo<Arc<HashMap<PhotoId, usize>>> = Memo::new(move |_| {
+        Arc::new(visible.with(|visible| {
+            visible
+                .iter()
+                .enumerate()
+                .map(|(index, id)| (id.clone(), index))
+                .collect()
+        }))
+    });
 
     Effect::new(move |_| {
-        let Some(highlight) = store.highlight.get().filter(|highlight| highlight.view == ViewKey::Library) else { return };
-        let Some(index) = positions.with(|positions| positions.get(&highlight.id).copied()) else { return };
+        let Some(highlight) = store
+            .highlight
+            .get()
+            .filter(|highlight| highlight.view == ViewKey::Library)
+        else {
+            return;
+        };
+        let Some(index) = positions.with(|positions| positions.get(&highlight.id).copied()) else {
+            return;
+        };
         let (_, columns, _, row_size) = layout.get_untracked();
         if let Some(element) = scroller.get_untracked() {
             #[expect(clippy::cast_precision_loss, reason = "row indexes")]
             let start = GAP_PX + (index / columns) as f64 * row_size;
-            let offset = centered_offset(start, layout.get_untracked().2, viewport.height.get_untracked(), total_height());
+            let offset = centered_offset(
+                start,
+                layout.get_untracked().2,
+                viewport.height.get_untracked(),
+                total_height(),
+            );
             #[expect(clippy::cast_possible_truncation, reason = "scroll offsets are pixels")]
             element.set_scroll_top(offset as i32);
         }
     });
 
     let selected_ids = move || {
-        store.selection.with_untracked(|selection| visible.with_untracked(|visible| visible.iter().filter(|id| selection.ids.contains(id)).cloned().collect::<Vec<_>>()))
+        store.selection.with_untracked(|selection| {
+            visible.with_untracked(|visible| {
+                visible
+                    .iter()
+                    .filter(|id| selection.ids.contains(id))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+        })
     };
     let selection_size = Memo::new(move |_| store.selection.with(|selection| selection.ids.len()));
     let flag = move |read: fn(&Settings) -> bool| Signal::derive(move || settings.with(read));

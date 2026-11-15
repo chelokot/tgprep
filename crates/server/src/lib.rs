@@ -60,8 +60,15 @@ fn gzip(data: &[u8]) -> io::Result<Vec<u8>> {
     encoder.finish()
 }
 
-fn collect(directory: &Path, prefix: &str, files: &mut Vec<(String, PathBuf)>) -> Result<(), ServeError> {
-    let read = |source| ServeError::Read { path: directory.to_owned(), source };
+fn collect(
+    directory: &Path,
+    prefix: &str,
+    files: &mut Vec<(String, PathBuf)>,
+) -> Result<(), ServeError> {
+    let read = |source| ServeError::Read {
+        path: directory.to_owned(),
+        source,
+    };
     for entry in std::fs::read_dir(directory).map_err(read)? {
         let entry = entry.map_err(read)?;
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -81,18 +88,31 @@ impl Client {
         collect(directory, "/", &mut files)?;
         let mut assets = HashMap::new();
         for (route, path) in files {
-            let identity = std::fs::read(&path).map_err(|source| ServeError::Read { path: path.clone(), source })?;
-            let extension = path.extension().and_then(|extension| extension.to_str()).unwrap_or_default();
+            let identity = std::fs::read(&path).map_err(|source| ServeError::Read {
+                path: path.clone(),
+                source,
+            })?;
+            let extension = path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .unwrap_or_default();
             let compress = |encode: fn(&[u8]) -> io::Result<Vec<u8>>| {
                 COMPRESSIBLE
                     .contains(&extension)
                     .then(|| encode(&identity))
                     .transpose()
-                    .map_err(|source| ServeError::Read { path: path.clone(), source })
+                    .map_err(|source| ServeError::Read {
+                        path: path.clone(),
+                        source,
+                    })
             };
             let asset = Asset {
                 content_type: content_type(extension),
-                cache: if route.starts_with("/assets/") { IMMUTABLE } else { NO_CACHE },
+                cache: if route.starts_with("/assets/") {
+                    IMMUTABLE
+                } else {
+                    NO_CACHE
+                },
                 brotli: compress(brotli)?,
                 gzip: compress(gzip)?,
                 identity,
@@ -110,8 +130,18 @@ impl Client {
         let Some(asset) = self.assets.get(route) else {
             return StatusCode::NOT_FOUND.into_response();
         };
-        let accepted = headers.get(ACCEPT_ENCODING).and_then(|value| value.to_str().ok()).unwrap_or_default();
-        let accepts = |encoding: &str| accepted.split(',').any(|candidate| candidate.split(';').next().is_some_and(|name| name.trim() == encoding));
+        let accepted = headers
+            .get(ACCEPT_ENCODING)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        let accepts = |encoding: &str| {
+            accepted.split(',').any(|candidate| {
+                candidate
+                    .split(';')
+                    .next()
+                    .is_some_and(|name| name.trim() == encoding)
+            })
+        };
         let (body, encoding) = match (&asset.brotli, &asset.gzip) {
             (Some(compressed), _) if accepts("br") => (compressed, Some("br")),
             (_, Some(compressed)) if accepts("gzip") => (compressed, Some("gzip")),

@@ -328,7 +328,9 @@ thread_local! {
 
 fn russian(language: &str) -> bool {
     ["ru", "uk", "be"].iter().any(|prefix| {
-        language.strip_prefix(prefix).is_some_and(|rest| !rest.starts_with(|character: char| character.is_alphanumeric() || character == '_'))
+        language.strip_prefix(prefix).is_some_and(|rest| {
+            !rest.starts_with(|character: char| character.is_alphanumeric() || character == '_')
+        })
     })
 }
 
@@ -337,5 +339,9 @@ pub fn t() -> &'static Strings {
 }
 
 pub fn fill(template: &str, values: &[(&str, &str)]) -> String {
-    values.iter().fold(template.to_owned(), |text, (name, value)| text.replace(&format!("{{{name}}}"), value))
+    values
+        .iter()
+        .fold(template.to_owned(), |text, (name, value)| {
+            text.replace(&format!("{{{name}}}"), value)
+        })
 }

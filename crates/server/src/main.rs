@@ -20,7 +20,10 @@ fn variable(name: &str) -> Option<String> {
 }
 
 async fn run() -> Result<(), StartError> {
-    let address: SocketAddr = variable("TGPREP_LISTEN").as_deref().unwrap_or("127.0.0.1:5180").parse()?;
+    let address: SocketAddr = variable("TGPREP_LISTEN")
+        .as_deref()
+        .unwrap_or("127.0.0.1:5180")
+        .parse()?;
     let directory = PathBuf::from(variable("TGPREP_CLIENT_DIR").unwrap_or_else(|| "dist".into()));
     let app = router(Client::load(&directory)?).into_make_service();
     match (variable("TGPREP_TLS_CERT"), variable("TGPREP_TLS_KEY")) {

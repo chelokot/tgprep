@@ -32,8 +32,14 @@ pub struct Thumbnail {
 
 pub enum Response {
     Ready,
-    Thumb { key: String, thumbnail: Option<Thumbnail> },
-    View { key: String, bitmap: ImageBitmap },
+    Thumb {
+        key: String,
+        thumbnail: Option<Thumbnail>,
+    },
+    View {
+        key: String,
+        bitmap: ImageBitmap,
+    },
 }
 
 #[derive(Debug)]
@@ -79,7 +85,12 @@ impl Request {
             "view" => Job::View,
             _ => return Err(Malformed),
         };
-        Ok(Self { job, key: text(value, "key")?, file: cast(value, "file")?, long_side: number(value, "longSide")? })
+        Ok(Self {
+            job,
+            key: text(value, "key")?,
+            file: cast(value, "file")?,
+            long_side: number(value, "longSide")?,
+        })
     }
 }
 
@@ -87,17 +98,28 @@ impl Response {
     pub fn to_js(&self) -> JsValue {
         match self {
             Self::Ready => object(&[("kind", &JsValue::from_str("ready"))]),
-            Self::Thumb { key, thumbnail: None } => object(&[("kind", &JsValue::from_str("thumb")), ("key", &JsValue::from_str(key))]),
-            Self::Thumb { key, thumbnail: Some(thumbnail) } => object(&[
+            Self::Thumb {
+                key,
+                thumbnail: None,
+            } => object(&[
+                ("kind", &JsValue::from_str("thumb")),
+                ("key", &JsValue::from_str(key)),
+            ]),
+            Self::Thumb {
+                key,
+                thumbnail: Some(thumbnail),
+            } => object(&[
                 ("kind", &JsValue::from_str("thumb")),
                 ("key", &JsValue::from_str(key)),
                 ("blob", &thumbnail.blob),
                 ("width", &JsValue::from_f64(thumbnail.width)),
                 ("height", &JsValue::from_f64(thumbnail.height)),
             ]),
-            Self::View { key, bitmap } => {
-                object(&[("kind", &JsValue::from_str("view")), ("key", &JsValue::from_str(key)), ("bitmap", bitmap)])
-            }
+            Self::View { key, bitmap } => object(&[
+                ("kind", &JsValue::from_str("view")),
+                ("key", &JsValue::from_str(key)),
+                ("bitmap", bitmap),
+            ]),
         }
     }
 
@@ -109,11 +131,21 @@ impl Response {
                 let thumbnail = if blob.is_undefined() {
                     None
                 } else {
-                    Some(Thumbnail { blob: blob.dyn_into().map_err(|_| Malformed)?, width: number(value, "width")?, height: number(value, "height")? })
+                    Some(Thumbnail {
+                        blob: blob.dyn_into().map_err(|_| Malformed)?,
+                        width: number(value, "width")?,
+                        height: number(value, "height")?,
+                    })
                 };
-                Ok(Self::Thumb { key: text(value, "key")?, thumbnail })
+                Ok(Self::Thumb {
+                    key: text(value, "key")?,
+                    thumbnail,
+                })
             }
-            "view" => Ok(Self::View { key: text(value, "key")?, bitmap: cast(value, "bitmap")? }),
+            "view" => Ok(Self::View {
+                key: text(value, "key")?,
+                bitmap: cast(value, "bitmap")?,
+            }),
             _ => Err(Malformed),
         }
     }
@@ -121,5 +153,8 @@ impl Response {
 
 pub fn scaled(width: f64, height: f64, long_side: f64) -> (f64, f64) {
     let scale = (long_side / width.max(height)).min(1.0);
-    ((width * scale).round().max(1.0), (height * scale).round().max(1.0))
+    (
+        (width * scale).round().max(1.0),
+        (height * scale).round().max(1.0),
+    )
 }

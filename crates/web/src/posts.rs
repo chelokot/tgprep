@@ -3,7 +3,10 @@ use crate::dnd::{DragPayload, press_to_drag};
 use crate::export::{copy_photo, export_post, prepare_png};
 use crate::i18n::{fill, t};
 use crate::icons::{self, svg};
-use crate::store::{CategoryFilter, Mode, PostsView, ViewKey, commit, commit_keyed, new_id, open_viewer, store, toast};
+use crate::store::{
+    CategoryFilter, Mode, PostsView, ViewKey, commit, commit_keyed, new_id, open_viewer, store,
+    toast,
+};
 use crate::thumbs::display_thumb;
 use crate::tile::{CornerButton, Fit, TileProps, tile};
 use crate::ui::{Chip, IconButton, PaneHeader, RangeInput};
@@ -12,7 +15,9 @@ use leptos::html::Div;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
-use tgprep_model::doc::{Category, CategoryId, Doc, MAX_CAPTION_LENGTH, MAX_POST_PHOTOS, PhotoId, Post, PostId};
+use tgprep_model::doc::{
+    Category, CategoryId, Doc, MAX_CAPTION_LENGTH, MAX_POST_PHOTOS, PhotoId, Post, PostId,
+};
 use tgprep_model::ops;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::PointerEvent;
@@ -22,13 +27,20 @@ const ESTIMATED_CARD_PX: f64 = 220.0;
 const OVERSCAN: usize = 4;
 
 fn visible_posts(doc: &Doc, filter: &CategoryFilter, hide_sent: bool) -> Vec<(PostId, usize)> {
-    doc.posts.iter().enumerate().filter(|(_, post)| filter.admits(&post.category) && !(hide_sent && post.sent)).map(|(index, post)| (post.id.clone(), index)).collect()
+    doc.posts
+        .iter()
+        .enumerate()
+        .filter(|(_, post)| filter.admits(&post.category) && !(hide_sent && post.sent))
+        .map(|(index, post)| (post.id.clone(), index))
+        .collect()
 }
 
 fn active_filter(view: PostsView) -> Memo<CategoryFilter> {
     let store = store();
     Memo::new(move |_| {
-        let filter = store.settings.with(|settings| settings.posts_filter.get(view).clone());
+        let filter = store
+            .settings
+            .with(|settings| settings.posts_filter.get(view).clone());
         store.doc.with(|doc| filter.active(doc))
     })
 }
@@ -40,23 +52,43 @@ fn hides_sent() -> bool {
 
 fn view_photo_ids(view: PostsView) -> Vec<PhotoId> {
     let store = store();
-    let hide_sent = store.mode.get_untracked() == Mode::Send && store.settings.with_untracked(|settings| settings.hide_sent);
-    let filter = store.settings.with_untracked(|settings| settings.posts_filter.get(view).clone());
+    let hide_sent = store.mode.get_untracked() == Mode::Send
+        && store.settings.with_untracked(|settings| settings.hide_sent);
+    let filter = store
+        .settings
+        .with_untracked(|settings| settings.posts_filter.get(view).clone());
     store.doc.with_untracked(|doc| {
         let filter = filter.active(doc);
-        visible_posts(doc, &filter, hide_sent).into_iter().flat_map(|(_, index)| doc.posts[index].items.clone()).collect()
+        visible_posts(doc, &filter, hide_sent)
+            .into_iter()
+            .flat_map(|(_, index)| doc.posts[index].items.clone())
+            .collect()
     })
 }
 
 fn set_filter(view: PostsView, filter: CategoryFilter) {
-    store().settings.update(|settings| settings.posts_filter.set(view, filter));
+    store()
+        .settings
+        .update(|settings| settings.posts_filter.set(view, filter));
 }
 
 fn copy_post_photo(id: &PhotoId, number: usize) {
     let store = store();
-    let Some(file) = store.library.with_untracked(|library| library.as_ref().and_then(|library| library.by_id.get(id).cloned())) else { return };
+    let Some(file) = store.library.with_untracked(|library| {
+        library
+            .as_ref()
+            .and_then(|library| library.by_id.get(id).cloned())
+    }) else {
+        return;
+    };
     let edits = store.doc.with_untracked(|doc| doc.meta(id).edits);
-    let copying = copy_photo(&file, &edits, store.settings.with_untracked(|settings| settings.export_long_side));
+    let copying = copy_photo(
+        &file,
+        &edits,
+        store
+            .settings
+            .with_untracked(|settings| settings.export_long_side),
+    );
     let id = id.clone();
     spawn_local(async move {
         match settle(copying).await {
@@ -75,7 +107,13 @@ fn PostTile(id: PhotoId, post: PostId, view: PostsView) -> impl IntoView {
     let thumb = display_thumb(id.clone());
     let index = Memo::new({
         let (id, post) = (id.clone(), post.clone());
-        move |_| store.doc.with(|doc| doc.post(&post).and_then(|post| post.items.iter().position(|item| *item == id)).unwrap_or_default())
+        move |_| {
+            store.doc.with(|doc| {
+                doc.post(&post)
+                    .and_then(|post| post.items.iter().position(|item| *item == id))
+                    .unwrap_or_default()
+            })
+        }
     });
     let compose = Memo::new(move |_| store.mode.get() == Mode::Compose);
     let style = Signal::derive(move || {
@@ -93,11 +131,26 @@ fn PostTile(id: PhotoId, post: PostId, view: PostsView) -> impl IntoView {
             return;
         }
         let clicked = id.clone();
-        press_to_drag(&event, move || DragPayload::Photos { ids: vec![id], from_post: Some(post) }, move |_| open_viewer(view_photo_ids(view), clicked, ViewKey::Posts(view)));
+        press_to_drag(
+            &event,
+            move || DragPayload::Photos {
+                ids: vec![id],
+                from_post: Some(post),
+            },
+            move |_| open_viewer(view_photo_ids(view), clicked, ViewKey::Posts(view)),
+        );
     };
     let removed = (id.clone(), post);
     tile(
-        TileProps { id, view: ViewKey::Posts(view), thumb, fit: Fit::Cover, actions: compose.into(), class: "shrink-0", style: Some(style) },
+        TileProps {
+            id,
+            view: ViewKey::Posts(view),
+            thumb,
+            fit: Fit::Cover,
+            actions: compose.into(),
+            class: "shrink-0",
+            style: Some(style),
+        },
         on_pointer_down,
         view! {
             <span data-tile-index=move || index.get() class="absolute inset-0"></span>
@@ -142,26 +195,58 @@ fn PostCard(id: PostId, view: PostsView) -> impl IntoView {
     });
     let index = Memo::new({
         let id = id.clone();
-        move |_| store.doc.with(|doc| doc.post_index(&id).unwrap_or_default())
+        move |_| {
+            store
+                .doc
+                .with(|doc| doc.post_index(&id).unwrap_or_default())
+        }
     });
     let categories = Memo::new(move |_| store.doc.with(|doc| doc.categories.clone()));
     let color = Memo::new(move |_| {
         let category = post.with(|post| post.as_ref().map(|post| post.category.clone()));
-        categories.with(|categories| category.and_then(|category| categories.iter().find(|candidate| candidate.id == category)).or(categories.first()).map(|category| category.color.clone()).unwrap_or_default())
+        categories.with(|categories| {
+            category
+                .and_then(|category| categories.iter().find(|candidate| candidate.id == category))
+                .or(categories.first())
+                .map(|category| category.color.clone())
+                .unwrap_or_default()
+        })
     });
     let compose = Memo::new(move |_| store.mode.get() == Mode::Compose);
     let sent = Memo::new(move |_| post.with(|post| post.as_ref().is_some_and(|post| post.sent)));
-    let caption = Memo::new(move |_| post.with(|post| post.as_ref().map(|post| post.caption.clone()).unwrap_or_default()));
-    let items = Memo::new(move |_| post.with(|post| post.as_ref().map(|post| post.items.clone()).unwrap_or_default()));
+    let caption = Memo::new(move |_| {
+        post.with(|post| {
+            post.as_ref()
+                .map(|post| post.caption.clone())
+                .unwrap_or_default()
+        })
+    });
+    let items = Memo::new(move |_| {
+        post.with(|post| {
+            post.as_ref()
+                .map(|post| post.items.clone())
+                .unwrap_or_default()
+        })
+    });
     let caption_length = Memo::new(move |_| caption.with(|caption| caption.encode_utf16().count()));
 
     let prepare = move |_| {
         if store.mode.get_untracked() != Mode::Send {
             return;
         }
-        let long_side = store.settings.with_untracked(|settings| settings.export_long_side);
+        let long_side = store
+            .settings
+            .with_untracked(|settings| settings.export_long_side);
         let files: Vec<_> = store.library.with_untracked(|library| {
-            items.get_untracked().iter().filter_map(|id| library.as_ref().and_then(|library| library.by_id.get(id).cloned())).collect()
+            items
+                .get_untracked()
+                .iter()
+                .filter_map(|id| {
+                    library
+                        .as_ref()
+                        .and_then(|library| library.by_id.get(id).cloned())
+                })
+                .collect()
         });
         for file in files {
             let edits = store.doc.with_untracked(|doc| doc.meta(&file.id).edits);
@@ -169,10 +254,21 @@ fn PostCard(id: PostId, view: PostsView) -> impl IntoView {
         }
     };
     let save = move |()| {
-        let Some(library) = store.library.get_untracked() else { return };
-        let Some(post) = post.get_untracked() else { return };
-        let photos: Vec<_> = store.doc.with_untracked(|doc| post.items.iter().filter_map(|id| Some((library.by_id.get(id).cloned()?, doc.meta(id).edits))).collect());
-        let long_side = store.settings.with_untracked(|settings| settings.export_long_side);
+        let Some(library) = store.library.get_untracked() else {
+            return;
+        };
+        let Some(post) = post.get_untracked() else {
+            return;
+        };
+        let photos: Vec<_> = store.doc.with_untracked(|doc| {
+            post.items
+                .iter()
+                .filter_map(|id| Some((library.by_id.get(id).cloned()?, doc.meta(id).edits)))
+                .collect()
+        });
+        let long_side = store
+            .settings
+            .with_untracked(|settings| settings.export_long_side);
         let number = index.get_untracked() + 1;
         spawn_local(async move {
             if let Ok(path) = export_post(&library.root, &post, number, photos, long_side).await {
@@ -360,7 +456,10 @@ fn CategoryChip(id: CategoryId, view: PostsView, active: Memo<CategoryFilter>) -
         if editing.get() {
             let renamed = id.clone();
             let deleted = id.clone();
-            let name = current.get_untracked().map(|category| category.name).unwrap_or_default();
+            let name = current
+                .get_untracked()
+                .map(|category| category.name)
+                .unwrap_or_default();
             view! {
                 <span class="flex shrink-0 items-center gap-1 rounded-full bg-raised py-0.5 pr-1 pl-2.5">
                     <input
@@ -407,7 +506,9 @@ fn CategoryChip(id: CategoryId, view: PostsView, active: Memo<CategoryFilter>) -
             }
             .into_any()
         } else {
-            let Some(category) = current.get() else { return ().into_any() };
+            let Some(category) = current.get() else {
+                return ().into_any();
+            };
             let selected = category.id.clone();
             view! {
                 <span on:dblclick=move |_| editing.set(true)>
@@ -459,31 +560,74 @@ pub fn PostsPane(view: PostsView) -> impl IntoView {
         })
     });
     let window = Memo::new(move |_| {
-        let range = layout.with(|(starts, heights, _)| visible_range(starts, heights, viewport.scroll_top.get(), viewport.height.get(), OVERSCAN));
-        visible.with(|visible| visible[range].iter().map(|(id, _)| id.clone()).collect::<Vec<_>>())
+        let range = layout.with(|(starts, heights, _)| {
+            visible_range(
+                starts,
+                heights,
+                viewport.scroll_top.get(),
+                viewport.height.get(),
+                OVERSCAN,
+            )
+        });
+        visible.with(|visible| {
+            visible[range]
+                .iter()
+                .map(|(id, _)| id.clone())
+                .collect::<Vec<_>>()
+        })
     });
     let scroll_to = move |position: usize| {
-        let Some(element) = scroller.get_untracked() else { return };
-        let offset = layout.with_untracked(|(starts, heights, total)| centered_offset(starts[position], heights[position], viewport.height.get_untracked(), *total));
+        let Some(element) = scroller.get_untracked() else {
+            return;
+        };
+        let offset = layout.with_untracked(|(starts, heights, total)| {
+            centered_offset(
+                starts[position],
+                heights[position],
+                viewport.height.get_untracked(),
+                *total,
+            )
+        });
         #[expect(clippy::cast_possible_truncation, reason = "scroll offsets are pixels")]
         element.set_scroll_top(offset as i32);
     };
     let settle_frame = StoredValue::new_local(None::<Frame>);
     Effect::new(move |_| {
-        let Some(highlight) = store.highlight.get().filter(|highlight| highlight.view == ViewKey::Posts(view)) else { return };
-        let position = visible.with_untracked(|visible| store.doc.with_untracked(|doc| visible.iter().position(|(_, index)| doc.posts[*index].items.contains(&highlight.id))));
+        let Some(highlight) = store
+            .highlight
+            .get()
+            .filter(|highlight| highlight.view == ViewKey::Posts(view))
+        else {
+            return;
+        };
+        let position = visible.with_untracked(|visible| {
+            store.doc.with_untracked(|doc| {
+                visible
+                    .iter()
+                    .position(|(_, index)| doc.posts[*index].items.contains(&highlight.id))
+            })
+        });
         if let Some(position) = position {
             scroll_to(position);
             settle_frame.set_value(Some(Frame::request(move |_| scroll_to(position))));
-        } else if store.doc.with_untracked(|doc| doc.posts.iter().any(|post| post.items.contains(&highlight.id))) {
+        } else if store.doc.with_untracked(|doc| {
+            doc.posts
+                .iter()
+                .any(|post| post.items.contains(&highlight.id))
+        }) {
             set_filter(view, CategoryFilter::All);
         }
     });
     let new_post_category = move || {
-        store.doc.with_untracked(|doc| match filter.get_untracked() {
-            CategoryFilter::All => doc.posts.last().map_or_else(|| doc.first_category().id.clone(), |post| post.category.clone()),
-            CategoryFilter::Only(category) => category,
-        })
+        store
+            .doc
+            .with_untracked(|doc| match filter.get_untracked() {
+                CategoryFilter::All => doc.posts.last().map_or_else(
+                    || doc.first_category().id.clone(),
+                    |post| post.category.clone(),
+                ),
+                CategoryFilter::Only(category) => category,
+            })
     };
 
     view! {
@@ -619,4 +763,3 @@ pub fn PostsPane(view: PostsView) -> impl IntoView {
         </section>
     }
 }
-

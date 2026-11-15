@@ -38,11 +38,15 @@ pub fn window() -> Window {
 }
 
 pub fn document() -> Document {
-    window().document().unwrap_or_else(|| wasm_bindgen::throw_str("no document"))
+    window()
+        .document()
+        .unwrap_or_else(|| wasm_bindgen::throw_str("no document"))
 }
 
 pub fn now() -> f64 {
-    window().performance().map_or(0.0, |performance| performance.now())
+    window()
+        .performance()
+        .map_or(0.0, |performance| performance.now())
 }
 
 pub fn rem_px() -> f64 {
@@ -55,7 +59,10 @@ pub fn rem_px() -> f64 {
 }
 
 pub fn error_message(error: &JsValue) -> String {
-    error.dyn_ref::<js_sys::Error>().map_or_else(|| error.as_string().unwrap_or_else(|| format!("{error:?}")), |error| String::from(error.to_string()))
+    error.dyn_ref::<js_sys::Error>().map_or_else(
+        || error.as_string().unwrap_or_else(|| format!("{error:?}")),
+        |error| String::from(error.to_string()),
+    )
 }
 
 pub async fn wait<T: JsCast>(promise: Promise) -> Result<T, JsValue> {
@@ -79,20 +86,35 @@ fn options(entries: &[(&str, &str)]) -> JsValue {
 }
 
 pub async fn pick_directory() -> Result<FileSystemDirectoryHandle, JsValue> {
-    wait(show_directory_picker(&options(&[("id", "tgprep"), ("mode", "readwrite")]))?).await
+    wait(show_directory_picker(&options(&[
+        ("id", "tgprep"),
+        ("mode", "readwrite"),
+    ]))?)
+    .await
 }
 
 pub async fn ensure_write_permission(handle: &FileSystemHandle) -> Result<bool, JsValue> {
     let descriptor = options(&[("mode", "readwrite")]);
     let handle: &PermissionHandle = handle.unchecked_ref();
-    if settle(handle.query_permission(&descriptor)).await?.as_string().as_deref() == Some("granted") {
+    if settle(handle.query_permission(&descriptor))
+        .await?
+        .as_string()
+        .as_deref()
+        == Some("granted")
+    {
         return Ok(true);
     }
-    Ok(settle(handle.request_permission(&descriptor)).await?.as_string().as_deref() == Some("granted"))
+    Ok(settle(handle.request_permission(&descriptor))
+        .await?
+        .as_string()
+        .as_deref()
+        == Some("granted"))
 }
 
 fn clipboard() -> Clipboard {
-    Reflect::get(&window().navigator(), &JsValue::from_str("clipboard")).unwrap_or(JsValue::UNDEFINED).unchecked_into()
+    Reflect::get(&window().navigator(), &JsValue::from_str("clipboard"))
+        .unwrap_or(JsValue::UNDEFINED)
+        .unchecked_into()
 }
 
 pub fn write_image(png: &Promise) -> Promise {
@@ -117,17 +139,35 @@ pub struct Listener {
 }
 
 impl Listener {
-    pub fn new(target: &web_sys::EventTarget, name: &'static str, capture: bool, callback: impl FnMut(web_sys::Event) + 'static) -> Self {
+    pub fn new(
+        target: &web_sys::EventTarget,
+        name: &'static str,
+        capture: bool,
+        callback: impl FnMut(web_sys::Event) + 'static,
+    ) -> Self {
         let callback = Closure::<dyn FnMut(web_sys::Event)>::new(callback);
-        let _ = target.add_event_listener_with_callback_and_bool(name, callback.as_ref().unchecked_ref(), capture);
-        Self { target: target.clone(), name, capture, callback: Some(callback) }
+        let _ = target.add_event_listener_with_callback_and_bool(
+            name,
+            callback.as_ref().unchecked_ref(),
+            capture,
+        );
+        Self {
+            target: target.clone(),
+            name,
+            capture,
+            callback: Some(callback),
+        }
     }
 }
 
 impl Drop for Listener {
     fn drop(&mut self) {
         if let Some(callback) = self.callback.take() {
-            let _ = self.target.remove_event_listener_with_callback_and_bool(self.name, callback.as_ref().unchecked_ref(), self.capture);
+            let _ = self.target.remove_event_listener_with_callback_and_bool(
+                self.name,
+                callback.as_ref().unchecked_ref(),
+                self.capture,
+            );
             retire(callback);
         }
     }
@@ -146,8 +186,13 @@ impl Frame {
                 callback(time);
             }
         });
-        let id = window().request_animation_frame(closure.as_ref().unchecked_ref()).unwrap_or_default();
-        Self { id, callback: Some(closure) }
+        let id = window()
+            .request_animation_frame(closure.as_ref().unchecked_ref())
+            .unwrap_or_default();
+        Self {
+            id,
+            callback: Some(closure),
+        }
     }
 }
 
@@ -173,8 +218,16 @@ impl Timeout {
                 callback();
             }
         });
-        let id = window().set_timeout_with_callback_and_timeout_and_arguments_0(closure.as_ref().unchecked_ref(), milliseconds).unwrap_or_default();
-        Self { id, callback: Some(closure) }
+        let id = window()
+            .set_timeout_with_callback_and_timeout_and_arguments_0(
+                closure.as_ref().unchecked_ref(),
+                milliseconds,
+            )
+            .unwrap_or_default();
+        Self {
+            id,
+            callback: Some(closure),
+        }
     }
 }
 
@@ -187,7 +240,6 @@ impl Drop for Timeout {
     }
 }
 
-
 #[derive(Default)]
 pub struct Serial {
     busy: std::cell::Cell<bool>,
@@ -199,7 +251,8 @@ pub struct SerialGuard(Rc<Serial>);
 impl Serial {
     pub async fn lock(self: &Rc<Self>) -> SerialGuard {
         if self.busy.get() {
-            let ready = Promise::new(&mut |resolve, _| self.waiting.borrow_mut().push_back(resolve));
+            let ready =
+                Promise::new(&mut |resolve, _| self.waiting.borrow_mut().push_back(resolve));
             let _ = JsFuture::from(ready).await;
         } else {
             self.busy.set(true);

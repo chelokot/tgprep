@@ -15,7 +15,12 @@ pub enum Fit {
 }
 
 #[component]
-pub fn CornerButton(#[prop(into)] label: Signal<&'static str>, #[prop(into)] on_click: Callback<()>, #[prop(into)] class: Signal<&'static str>, children: Children) -> impl IntoView {
+pub fn CornerButton(
+    #[prop(into)] label: Signal<&'static str>,
+    #[prop(into)] on_click: Callback<()>,
+    #[prop(into)] class: Signal<&'static str>,
+    children: Children,
+) -> impl IntoView {
     view! {
         <button
             type="button"
@@ -43,23 +48,47 @@ pub struct TileProps {
     pub style: Option<Signal<String>>,
 }
 
-pub fn tile(props: TileProps, on_pointer_down: impl Fn(PointerEvent) + 'static, children: impl IntoView + 'static) -> impl IntoView {
-    let TileProps { id, view, thumb, fit, actions, class, style } = props;
+pub fn tile(
+    props: TileProps,
+    on_pointer_down: impl Fn(PointerEvent) + 'static,
+    children: impl IntoView + 'static,
+) -> impl IntoView {
+    let TileProps {
+        id,
+        view,
+        thumb,
+        fit,
+        actions,
+        class,
+        style,
+    } = props;
     let store = store();
     let meta = Memo::new({
         let id = id.clone();
-        move |_| store.doc.with(|doc| {
-            let meta = doc.meta(&id);
-            (meta.checked, meta.archived)
-        })
+        move |_| {
+            store.doc.with(|doc| {
+                let meta = doc.meta(&id);
+                (meta.checked, meta.archived)
+            })
+        }
     });
     let selected = Memo::new({
         let id = id.clone();
-        move |_| store.selection.with(|selection| selection.ids.contains(&id))
+        move |_| {
+            store
+                .selection
+                .with(|selection| selection.ids.contains(&id))
+        }
     });
     let highlighted = Memo::new({
         let id = id.clone();
-        move |_| store.highlight.with(|highlight| highlight.as_ref().is_some_and(|highlight| highlight.id == id && highlight.view == view))
+        move |_| {
+            store.highlight.with(|highlight| {
+                highlight
+                    .as_ref()
+                    .is_some_and(|highlight| highlight.id == id && highlight.view == view)
+            })
+        }
     });
     let state = move || {
         if selected.get() {

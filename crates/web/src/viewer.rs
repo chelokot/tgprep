@@ -15,7 +15,9 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::sync::Arc;
 use tgprep_model::doc::{Adjustment, Aspect, Crop, Edits, PhotoId};
-use tgprep_model::geometry::{Handle, Side, Size, aspect_ratio, fit_crop, frame_size, move_crop, output_size, resize_crop};
+use tgprep_model::geometry::{
+    Handle, Side, Size, aspect_ratio, fit_crop, frame_size, move_crop, output_size, resize_crop,
+};
 use tgprep_model::ops;
 use tgprep_worker::{Job, Request, Response};
 use wasm_bindgen::prelude::*;
@@ -43,7 +45,10 @@ fn decoded(_: &Worker, response: Response) {
         Response::Ready => {
             let waiting = DECODER.with_borrow_mut(|decoder| {
                 decoder.ready = true;
-                std::mem::take(&mut decoder.waiting).into_iter().map(|message| (decoder.worker.clone(), message)).collect::<Vec<_>>()
+                std::mem::take(&mut decoder.waiting)
+                    .into_iter()
+                    .map(|message| (decoder.worker.clone(), message))
+                    .collect::<Vec<_>>()
             });
             for (worker, message) in waiting {
                 if let Some(worker) = worker {
@@ -67,7 +72,13 @@ pub fn start_decoder() {
 
 fn load_bitmap(file: &Rc<PhotoFile>) -> Promise {
     let key = format!("{}|{}", file.id, file.last_modified);
-    if let Some(cached) = DECODER.with_borrow(|decoder| decoder.bitmaps.iter().find(|(candidate, _)| *candidate == key).map(|(_, promise)| promise.clone())) {
+    if let Some(cached) = DECODER.with_borrow(|decoder| {
+        decoder
+            .bitmaps
+            .iter()
+            .find(|(candidate, _)| *candidate == key)
+            .map(|(_, promise)| promise.clone())
+    }) {
         return cached;
     }
     let requested = key.clone();
@@ -76,8 +87,16 @@ fn load_bitmap(file: &Rc<PhotoFile>) -> Promise {
     });
     let handle = file.handle.clone();
     spawn_local(async move {
-        let Ok(data) = wait::<File>(handle.get_file()).await else { return };
-        let message = Request { job: Job::View, key, file: data, long_side: MAX_VIEW_SIDE }.to_js();
+        let Ok(data) = wait::<File>(handle.get_file()).await else {
+            return;
+        };
+        let message = Request {
+            job: Job::View,
+            key,
+            file: data,
+            long_side: MAX_VIEW_SIDE,
+        }
+        .to_js();
         let worker = DECODER.with_borrow_mut(|decoder| {
             if decoder.ready {
                 decoder.worker.clone()
@@ -108,15 +127,33 @@ fn set_edits(id: &PhotoId, key: &str, update: impl FnOnce(Edits) -> Edits) {
 }
 
 fn fit_into(container: Size, aspect: f64) -> Size {
-    if container.w / container.h > aspect { Size { w: container.h * aspect, h: container.h } } else { Size { w: container.w, h: container.w / aspect } }
+    if container.w / container.h > aspect {
+        Size {
+            w: container.h * aspect,
+            h: container.h,
+        }
+    } else {
+        Size {
+            w: container.w,
+            h: container.w / aspect,
+        }
+    }
 }
 
 fn number(value: f64) -> String {
-    if value.fract() == 0.0 { format!("{}", value.trunc()) } else { value.to_string() }
+    if value.fract() == 0.0 {
+        format!("{}", value.trunc())
+    } else {
+        value.to_string()
+    }
 }
 
 fn photo_file(id: &PhotoId) -> Option<Rc<PhotoFile>> {
-    store().library.with_untracked(|library| library.as_ref().and_then(|library| library.by_id.get(id).cloned()))
+    store().library.with_untracked(|library| {
+        library
+            .as_ref()
+            .and_then(|library| library.by_id.get(id).cloned())
+    })
 }
 
 fn edits_of(id: PhotoId) -> Memo<Edits> {
@@ -130,10 +167,15 @@ fn CropOverlay(id: PhotoId, size: Size) -> impl IntoView {
     let dragging = StoredValue::new_local(Vec::<Listener>::new());
     let start = move |event: PointerEvent, handle: Option<Handle>| {
         event.stop_propagation();
-        if let Some(target) = event.current_target().and_then(|target| target.dyn_into::<web_sys::Element>().ok()) {
+        if let Some(target) = event
+            .current_target()
+            .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+        {
             let _ = target.set_pointer_capture(event.pointer_id());
         }
-        let Some(overlay) = overlay.get_untracked() else { return };
+        let Some(overlay) = overlay.get_untracked() else {
+            return;
+        };
         let rect = overlay.get_bounding_client_rect();
         let origin = (f64::from(event.client_x()), f64::from(event.client_y()));
         let initial = edits.get_untracked();
@@ -141,20 +183,47 @@ fn CropOverlay(id: PhotoId, size: Size) -> impl IntoView {
         let id = id.clone();
         let target: web_sys::EventTarget = window().into();
         let moving = Listener::new(&target, "pointermove", false, move |event| {
-            let Some(event) = event.dyn_ref::<PointerEvent>() else { return };
+            let Some(event) = event.dyn_ref::<PointerEvent>() else {
+                return;
+            };
             let (x, y) = (f64::from(event.client_x()), f64::from(event.client_y()));
             let next = match handle {
-                Some(handle) => resize_crop(size, &initial, initial.crop, handle, (x - rect.left()) / rect.width(), (y - rect.top()) / rect.height(), ratio),
-                None => move_crop(size, &initial, initial.crop, (x - origin.0) / rect.width(), (y - origin.1) / rect.height()),
+                Some(handle) => resize_crop(
+                    size,
+                    &initial,
+                    initial.crop,
+                    handle,
+                    (x - rect.left()) / rect.width(),
+                    (y - rect.top()) / rect.height(),
+                    ratio,
+                ),
+                None => move_crop(
+                    size,
+                    &initial,
+                    initial.crop,
+                    (x - origin.0) / rect.width(),
+                    (y - origin.1) / rect.height(),
+                ),
             };
-            set_edits(&id, "crop", |current| Edits { crop: next, ..current });
+            set_edits(&id, "crop", |current| Edits {
+                crop: next,
+                ..current
+            });
         });
-        let ending = Listener::new(&target, "pointerup", false, move |_| dragging.update_value(Vec::clear));
+        let ending = Listener::new(&target, "pointerup", false, move |_| {
+            dragging.update_value(Vec::clear)
+        });
         dragging.set_value(vec![moving, ending]);
     };
     let box_style = move || {
         let crop = edits.get().crop;
-        format!("left: {}%; top: {}%; width: {}%; height: {}%;", crop.x * 100.0, crop.y * 100.0, crop.w * 100.0, crop.h * 100.0)
+        format!(
+            "left: {}%; top: {}%; width: {}%; height: {}%;",
+            crop.x * 100.0,
+            crop.y * 100.0,
+            crop.w * 100.0,
+            crop.h * 100.0
+        )
     };
     let mover = start.clone();
     view! {
@@ -193,7 +262,13 @@ fn CropOverlay(id: PhotoId, size: Size) -> impl IntoView {
 }
 
 #[component]
-fn Stage(id: PhotoId, file: Rc<PhotoFile>, size: Size, cropping: Memo<bool>, comparing: RwSignal<bool>) -> impl IntoView {
+fn Stage(
+    id: PhotoId,
+    file: Rc<PhotoFile>,
+    size: Size,
+    cropping: Memo<bool>,
+    comparing: RwSignal<bool>,
+) -> impl IntoView {
     let edits = edits_of(id.clone());
     let container = NodeRef::<Div>::new();
     let canvas = NodeRef::<CanvasElement>::new();
@@ -206,7 +281,10 @@ fn Stage(id: PhotoId, file: Rc<PhotoFile>, size: Size, cropping: Memo<bool>, com
         if let Some(element) = container.get() {
             watch.set_value(ResizeWatch::new(&element, move |entry| {
                 let rect = entry.content_rect();
-                bounds.set(Size { w: rect.width(), h: rect.height() });
+                bounds.set(Size {
+                    w: rect.width(),
+                    h: rect.height(),
+                });
             }));
         }
     });
@@ -216,12 +294,26 @@ fn Stage(id: PhotoId, file: Rc<PhotoFile>, size: Size, cropping: Memo<bool>, com
             let _ = bitmap.try_set(Some(loaded));
         }
     });
-    let shown = Memo::new(move |_| if comparing.get() { Edits::default() } else { edits.get() });
+    let shown = Memo::new(move |_| {
+        if comparing.get() {
+            Edits::default()
+        } else {
+            edits.get()
+        }
+    });
     let display = Memo::new(move |_| {
         let shown = shown.get();
-        let output = if cropping.get() { frame_size(size, shown.quarter) } else { output_size(size, &shown) };
+        let output = if cropping.get() {
+            frame_size(size, shown.quarter)
+        } else {
+            output_size(size, &shown)
+        };
         let container = bounds.get();
-        if container.w > 0.0 { fit_into(container, output.w / output.h) } else { Size { w: 0.0, h: 0.0 } }
+        if container.w > 0.0 {
+            fit_into(container, output.w / output.h)
+        } else {
+            Size { w: 0.0, h: 0.0 }
+        }
     });
     Effect::new(move |_| {
         let (shown, cropping, display) = (shown.get(), cropping.get(), display.get());
@@ -232,14 +324,26 @@ fn Stage(id: PhotoId, file: Rc<PhotoFile>, size: Size, cropping: Memo<bool>, com
             }
             let Some(element) = canvas.get() else { return };
             let ratio = window().device_pixel_ratio();
-            #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "canvas pixel sizes")]
-            let output = ((display.w * ratio).round() as u32, (display.h * ratio).round() as u32);
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "canvas pixel sizes"
+            )]
+            let output = (
+                (display.w * ratio).round() as u32,
+                (display.h * ratio).round() as u32,
+            );
             renderer.update_value(|renderer| {
                 if renderer.is_none() {
                     *renderer = Renderer::new(Canvas::Element(element)).ok();
                 }
                 if let Some(renderer) = renderer.as_mut() {
-                    let _ = renderer.render(bitmap, &shown, if cropping { Crop::FULL } else { shown.crop }, output);
+                    let _ = renderer.render(
+                        bitmap,
+                        &shown,
+                        if cropping { Crop::FULL } else { shown.crop },
+                        output,
+                    );
                 }
             });
         });
@@ -269,10 +373,32 @@ struct Group {
 const GROUPS: [Group; 3] = [
     Group {
         title: || t().light,
-        keys: &[(Adjustment::Exposure, -100.0), (Adjustment::Brightness, -100.0), (Adjustment::Contrast, -100.0), (Adjustment::Highlights, -100.0), (Adjustment::Shadows, -100.0)],
+        keys: &[
+            (Adjustment::Exposure, -100.0),
+            (Adjustment::Brightness, -100.0),
+            (Adjustment::Contrast, -100.0),
+            (Adjustment::Highlights, -100.0),
+            (Adjustment::Shadows, -100.0),
+        ],
     },
-    Group { title: || t().color, keys: &[(Adjustment::Temperature, -100.0), (Adjustment::Tint, -100.0), (Adjustment::Saturation, -100.0), (Adjustment::Vibrance, -100.0)] },
-    Group { title: || t().effects, keys: &[(Adjustment::Sharpness, 0.0), (Adjustment::Vignette, -100.0), (Adjustment::Fade, 0.0), (Adjustment::Grain, 0.0)] },
+    Group {
+        title: || t().color,
+        keys: &[
+            (Adjustment::Temperature, -100.0),
+            (Adjustment::Tint, -100.0),
+            (Adjustment::Saturation, -100.0),
+            (Adjustment::Vibrance, -100.0),
+        ],
+    },
+    Group {
+        title: || t().effects,
+        keys: &[
+            (Adjustment::Sharpness, 0.0),
+            (Adjustment::Vignette, -100.0),
+            (Adjustment::Fade, 0.0),
+            (Adjustment::Grain, 0.0),
+        ],
+    },
 ];
 
 fn adjustment_label(adjustment: Adjustment) -> &'static str {
@@ -321,12 +447,21 @@ fn EditPanel(id: PhotoId, size: Size, cropping: RwSignal<bool>) -> impl IntoView
             set_edits(&id, "quarter", |current| {
                 let quarter = current.quarter.turned(clockwise);
                 let next = Edits { quarter, ..current };
-                Edits { crop: fit_crop(size, &next, Crop::FULL, aspect_ratio(current.aspect, frame_size(size, quarter))), ..next }
+                Edits {
+                    crop: fit_crop(
+                        size,
+                        &next,
+                        Crop::FULL,
+                        aspect_ratio(current.aspect, frame_size(size, quarter)),
+                    ),
+                    ..next
+                }
             });
         }
     };
     let turn_left = turn.clone();
-    let (flipped, reset_crop, angle_reset, angle_change) = (id.clone(), id.clone(), id.clone(), id.clone());
+    let (flipped, reset_crop, angle_reset, angle_change) =
+        (id.clone(), id.clone(), id.clone(), id.clone());
     let (pasted, reset_all) = (id.clone(), id.clone());
     let aspects = id.clone();
     let adjusted = id;
@@ -516,9 +651,21 @@ fn viewer_state() -> Option<Viewer> {
 
 fn go(delta: isize) {
     let Some(viewer) = viewer_state() else { return };
-    let Some(index) = viewer.ids.iter().position(|candidate| *candidate == viewer.id) else { return };
-    if let Some(next) = index.checked_add_signed(delta).and_then(|next| viewer.ids.get(next)) {
-        store().viewer.set(Some(Viewer { id: next.clone(), ..viewer }));
+    let Some(index) = viewer
+        .ids
+        .iter()
+        .position(|candidate| *candidate == viewer.id)
+    else {
+        return;
+    };
+    if let Some(next) = index
+        .checked_add_signed(delta)
+        .and_then(|next| viewer.ids.get(next))
+    {
+        store().viewer.set(Some(Viewer {
+            id: next.clone(),
+            ..viewer
+        }));
     }
 }
 
@@ -526,25 +673,54 @@ fn archive_and_advance() {
     let Some(viewer) = viewer_state() else { return };
     let id = viewer.id.clone();
     let archived = !store().doc.with_untracked(|doc| doc.meta(&id).archived);
-    let index = viewer.ids.iter().position(|candidate| *candidate == id).unwrap_or_default();
+    let index = viewer
+        .ids
+        .iter()
+        .position(|candidate| *candidate == id)
+        .unwrap_or_default();
     commit({
         let id = id.clone();
         move |doc| ops::set_archived(doc, &[id], archived)
     });
-    let remaining: Vec<PhotoId> = viewer.ids.iter().filter(|candidate| **candidate != id).cloned().collect();
-    match remaining.get(index.min(remaining.len().saturating_sub(1))).cloned() {
-        Some(next) => store().viewer.set(Some(Viewer { ids: Arc::new(remaining), id: next, ..viewer })),
+    let remaining: Vec<PhotoId> = viewer
+        .ids
+        .iter()
+        .filter(|candidate| **candidate != id)
+        .cloned()
+        .collect();
+    match remaining
+        .get(index.min(remaining.len().saturating_sub(1)))
+        .cloned()
+    {
+        Some(next) => store().viewer.set(Some(Viewer {
+            ids: Arc::new(remaining),
+            id: next,
+            ..viewer
+        })),
         None => close_viewer(),
     }
 }
 
 fn copy_current() {
     let Some(viewer) = viewer_state() else { return };
-    let Some(file) = photo_file(&viewer.id) else { return };
+    let Some(file) = photo_file(&viewer.id) else {
+        return;
+    };
     let store = store();
     let edits = store.doc.with_untracked(|doc| doc.meta(&viewer.id).edits);
-    let number = viewer.ids.iter().position(|candidate| *candidate == viewer.id).unwrap_or_default() + 1;
-    let copying = copy_photo(&file, &edits, store.settings.with_untracked(|settings| settings.export_long_side));
+    let number = viewer
+        .ids
+        .iter()
+        .position(|candidate| *candidate == viewer.id)
+        .unwrap_or_default()
+        + 1;
+    let copying = copy_photo(
+        &file,
+        &edits,
+        store
+            .settings
+            .with_untracked(|settings| settings.export_long_side),
+    );
     spawn_local(async move {
         match settle(copying).await {
             Ok(_) => toast(fill(t().copied_photo, &[("number", &number.to_string())])),
@@ -561,14 +737,39 @@ fn toggle_checked(id: PhotoId) {
 }
 
 fn is_text_entry(target: Option<web_sys::EventTarget>) -> bool {
-    target.is_some_and(|target| target.has_type::<web_sys::HtmlTextAreaElement>() || target.dyn_ref::<web_sys::HtmlInputElement>().is_some_and(|input| input.type_() != "range"))
+    target.is_some_and(|target| {
+        target.has_type::<web_sys::HtmlTextAreaElement>()
+            || target
+                .dyn_ref::<web_sys::HtmlInputElement>()
+                .is_some_and(|input| input.type_() != "range")
+    })
 }
 
 #[component]
 fn ViewerScreen() -> impl IntoView {
     let store = store();
-    let id = Memo::new(move |_| store.viewer.with(|viewer| viewer.as_ref().map(|viewer| viewer.id.clone()).unwrap_or_else(|| PhotoId(String::new()))));
-    let position = Memo::new(move |_| store.viewer.with(|viewer| viewer.as_ref().map_or((0, 0), |viewer| (viewer.ids.iter().position(|candidate| *candidate == viewer.id).unwrap_or_default(), viewer.ids.len()))));
+    let id = Memo::new(move |_| {
+        store.viewer.with(|viewer| {
+            viewer
+                .as_ref()
+                .map(|viewer| viewer.id.clone())
+                .unwrap_or_else(|| PhotoId(String::new()))
+        })
+    });
+    let position = Memo::new(move |_| {
+        store.viewer.with(|viewer| {
+            viewer.as_ref().map_or((0, 0), |viewer| {
+                (
+                    viewer
+                        .ids
+                        .iter()
+                        .position(|candidate| *candidate == viewer.id)
+                        .unwrap_or_default(),
+                    viewer.ids.len(),
+                )
+            })
+        })
+    });
     let meta = Memo::new(move |_| {
         let id = id.get();
         store.doc.with(|doc| {
@@ -577,7 +778,11 @@ fn ViewerScreen() -> impl IntoView {
         })
     });
     let editing = Memo::new(move |_| store.settings.with(|settings| settings.edit_panel_open));
-    let set_editing = move |open: bool| store.settings.update(|settings| settings.edit_panel_open = open);
+    let set_editing = move |open: bool| {
+        store
+            .settings
+            .update(|settings| settings.edit_panel_open = open)
+    };
     let cropping = RwSignal::new(false);
     let comparing = RwSignal::new(false);
     let size = Memo::new(move |_| {
@@ -590,9 +795,19 @@ fn ViewerScreen() -> impl IntoView {
     let cropping_shown = Memo::new(move |_| cropping.get() && editing.get());
 
     Effect::new(move |_| {
-        let Some(viewer) = store.viewer.get() else { return };
-        let index = viewer.ids.iter().position(|candidate| *candidate == viewer.id).unwrap_or_default();
-        for neighbour in [index.checked_sub(1), Some(index + 1)].into_iter().flatten().filter_map(|neighbour| viewer.ids.get(neighbour)) {
+        let Some(viewer) = store.viewer.get() else {
+            return;
+        };
+        let index = viewer
+            .ids
+            .iter()
+            .position(|candidate| *candidate == viewer.id)
+            .unwrap_or_default();
+        for neighbour in [index.checked_sub(1), Some(index + 1)]
+            .into_iter()
+            .flatten()
+            .filter_map(|neighbour| viewer.ids.get(neighbour))
+        {
             if let Some(file) = photo_file(neighbour) {
                 let _ = load_bitmap(&file);
             }
@@ -602,7 +817,9 @@ fn ViewerScreen() -> impl IntoView {
     let target: web_sys::EventTarget = window().into();
     let keys = StoredValue::new_local(vec![
         Listener::new(&target, "keydown", false, move |event| {
-            let Some(event) = event.dyn_ref::<KeyboardEvent>() else { return };
+            let Some(event) = event.dyn_ref::<KeyboardEvent>() else {
+                return;
+            };
             if is_text_entry(event.target()) {
                 return;
             }
@@ -632,7 +849,13 @@ fn ViewerScreen() -> impl IntoView {
                 }
                 "\\" => comparing.set(true),
                 digit if digit.len() == 1 && ("1"..="9").contains(&digit) => {
-                    let category = store.doc.with_untracked(|doc| digit.parse::<usize>().ok().and_then(|number| doc.categories.get(number - 1)).map(|category| category.id.clone()));
+                    let category = store.doc.with_untracked(|doc| {
+                        digit
+                            .parse::<usize>()
+                            .ok()
+                            .and_then(|number| doc.categories.get(number - 1))
+                            .map(|category| category.id.clone())
+                    });
                     if let Some(category) = category {
                         commit(move |doc| ops::set_photo_category(doc, &[current], &category));
                     }
@@ -641,7 +864,10 @@ fn ViewerScreen() -> impl IntoView {
             }
         }),
         Listener::new(&target, "keyup", false, move |event| {
-            if event.dyn_ref::<KeyboardEvent>().is_some_and(|event| event.key() == "\\") {
+            if event
+                .dyn_ref::<KeyboardEvent>()
+                .is_some_and(|event| event.key() == "\\")
+            {
                 comparing.set(false);
             }
         }),

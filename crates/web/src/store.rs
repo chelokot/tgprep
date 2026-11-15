@@ -93,7 +93,11 @@ pub enum CategoryFilter {
 
 impl From<String> for CategoryFilter {
     fn from(value: String) -> Self {
-        if value == "all" { Self::All } else { Self::Only(CategoryId(value)) }
+        if value == "all" {
+            Self::All
+        } else {
+            Self::Only(CategoryId(value))
+        }
     }
 }
 
@@ -191,7 +195,10 @@ impl Default for Settings {
             show_archived: false,
             post_tile_height: 8.0,
             hide_sent: false,
-            posts_filter: PostsFilters { a: CategoryFilter::All, b: CategoryFilter::All },
+            posts_filter: PostsFilters {
+                a: CategoryFilter::All,
+                b: CategoryFilter::All,
+            },
             pane_widths: DEFAULT_PANE_WIDTHS,
             edit_panel_open: false,
         }
@@ -216,8 +223,14 @@ fn load_settings() -> Settings {
 }
 
 pub fn save_settings(settings: &Settings) {
-    let persisted = PersistedSettings { state: settings.clone(), version: 0 };
-    if let (Some(storage), Ok(text)) = (window().local_storage().ok().flatten(), serde_json::to_string(&persisted)) {
+    let persisted = PersistedSettings {
+        state: settings.clone(),
+        version: 0,
+    };
+    if let (Some(storage), Ok(text)) = (
+        window().local_storage().ok().flatten(),
+        serde_json::to_string(&persisted),
+    ) {
         let _ = storage.set_item(SETTINGS_KEY, &text);
     }
 }
@@ -252,7 +265,9 @@ fn create_store() -> Store {
         last_posts_view: RwSignal::new(PostsView::A),
         copied_adjustments: RwSignal::new(None),
         toast: RwSignal::new(None),
-        placements: Memo::new(move |_| Arc::new(tgprep_model::ops::placements_by_photo(&doc.read().posts))),
+        placements: Memo::new(move |_| {
+            Arc::new(tgprep_model::ops::placements_by_photo(&doc.read().posts))
+        }),
     }
 }
 
@@ -274,7 +289,10 @@ fn nonce() -> u64 {
 }
 
 pub fn new_id() -> String {
-    window().crypto().map(|crypto| crypto.random_uuid()).unwrap_or_else(|_| format!("{}", now()))
+    window()
+        .crypto()
+        .map(|crypto| crypto.random_uuid())
+        .unwrap_or_else(|_| format!("{}", now()))
 }
 
 pub fn commit(recipe: impl FnOnce(&mut Doc)) {
@@ -291,7 +309,8 @@ pub fn commit_keyed(key: Option<String>, recipe: impl FnOnce(&mut Doc)) {
     }
     let time = now();
     store.history.update(|history| {
-        let coalesce = key.is_some() && key == history.last_key && time - history.last_at < COALESCE_MS;
+        let coalesce =
+            key.is_some() && key == history.last_key && time - history.last_at < COALESCE_MS;
         if !coalesce {
             if history.past.len() > HISTORY_LIMIT {
                 history.past.remove(0);
@@ -345,7 +364,11 @@ pub fn redo() {
 
 pub fn open_viewer(ids: Vec<PhotoId>, id: PhotoId, origin: ViewKey) {
     let store = store();
-    store.viewer.set(Some(Viewer { ids: Arc::new(ids), id, origin }));
+    store.viewer.set(Some(Viewer {
+        ids: Arc::new(ids),
+        id,
+        origin,
+    }));
     store.highlight.set(None);
 }
 
@@ -353,12 +376,20 @@ pub fn close_viewer() {
     let store = store();
     if let Some(viewer) = store.viewer.get_untracked() {
         store.viewer.set(None);
-        store.highlight.set(Some(Highlight { id: viewer.id, view: viewer.origin, nonce: nonce() }));
+        store.highlight.set(Some(Highlight {
+            id: viewer.id,
+            view: viewer.origin,
+            nonce: nonce(),
+        }));
     }
 }
 
 pub fn reveal_photo(id: PhotoId, view: ViewKey) {
-    store().highlight.set(Some(Highlight { id, view, nonce: nonce() }));
+    store().highlight.set(Some(Highlight {
+        id,
+        view,
+        nonce: nonce(),
+    }));
 }
 
 pub fn clear_selection() {
@@ -367,5 +398,6 @@ pub fn clear_selection() {
 
 pub fn toast(message: String) {
     store().toast.set(Some((message, nonce())));
-    TOAST_TIMER.with_borrow_mut(|timer| *timer = Some(Timeout::new(TOAST_MS, || store().toast.set(None))));
+    TOAST_TIMER
+        .with_borrow_mut(|timer| *timer = Some(Timeout::new(TOAST_MS, || store().toast.set(None))));
 }
