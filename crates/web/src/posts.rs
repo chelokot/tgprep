@@ -289,7 +289,7 @@ fn PostCard(id: PostId, view: PostsView) -> impl IntoView {
             class=move || if sent.get() { "rounded-2xl border border-line bg-panel p-3 shadow-sm transition-opacity opacity-55" } else { "rounded-2xl border border-line bg-panel p-3 shadow-sm transition-opacity " }
             style=move || format!("border-left-color: {}; border-left-width: 0.25rem;", color.get())
         >
-            <header class="mb-2 flex items-center gap-1.5">
+            <header class="mb-2 flex flex-wrap items-center gap-1.5">
                 {move || {
                     let dragged = dragged.clone();
                     compose
@@ -322,7 +322,7 @@ fn PostCard(id: PostId, view: PostsView) -> impl IntoView {
                         commit(move |doc| ops::set_post_category(doc, &post, &category));
                     }
                     style:color=move || color.get()
-                    class="max-w-32 truncate rounded-md bg-transparent px-1 py-0.5 text-xs font-semibold hover:bg-raised disabled:appearance-none"
+                    class="min-w-0 max-w-32 truncate rounded-md bg-transparent px-1 py-0.5 text-xs font-semibold hover:bg-raised disabled:appearance-none"
                 >
                     <For each=move || categories.get() key=|category: &Category| category.id.clone() let:option>
                         {
@@ -340,34 +340,35 @@ fn PostCard(id: PostId, view: PostsView) -> impl IntoView {
                     "/"
                     {MAX_POST_PHOTOS}
                 </span>
-                <div class="flex-1"></div>
-                <IconButton
-                    icon=icons::SEND
-                    label=Signal::derive(move || if sent.get() { t().unmark_sent } else { t().mark_sent })
-                    active=sent
-                    on_click=move |()| {
-                        let (post, sent) = (sent_id.clone(), !sent.get_untracked());
-                        commit(move |doc| ops::set_sent(doc, &post, sent));
-                    }
-                />
-                <IconButton icon=icons::DOWNLOAD label=t().export_post disabled=Signal::derive(move || items.with(Vec::is_empty)) on_click=save />
-                {move || {
-                    let deleted = deleted.clone();
-                    compose
-                        .get()
-                        .then(move || {
-                            view! {
-                                <IconButton
-                                    icon=icons::TRASH_2
-                                    label=t().delete_post
-                                    on_click=move |()| {
-                                        let post = deleted.clone();
-                                        commit(move |doc| ops::delete_post(doc, &post));
-                                    }
-                                />
-                            }
-                        })
-                }}
+                <div class="ml-auto flex items-center gap-1.5">
+                    <IconButton
+                        icon=icons::SEND
+                        label=Signal::derive(move || if sent.get() { t().unmark_sent } else { t().mark_sent })
+                        active=sent
+                        on_click=move |()| {
+                            let (post, sent) = (sent_id.clone(), !sent.get_untracked());
+                            commit(move |doc| ops::set_sent(doc, &post, sent));
+                        }
+                    />
+                    <IconButton icon=icons::DOWNLOAD label=t().export_post disabled=Signal::derive(move || items.with(Vec::is_empty)) on_click=save />
+                    {move || {
+                        let deleted = deleted.clone();
+                        compose
+                            .get()
+                            .then(move || {
+                                view! {
+                                    <IconButton
+                                        icon=icons::TRASH_2
+                                        label=t().delete_post
+                                        on_click=move |()| {
+                                            let post = deleted.clone();
+                                            commit(move |doc| ops::delete_post(doc, &post));
+                                        }
+                                    />
+                                }
+                            })
+                    }}
+                </div>
             </header>
             <div data-post-media="" class="flex min-h-16 flex-wrap gap-1">
                 {move || {

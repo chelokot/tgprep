@@ -210,6 +210,24 @@ test('keeps making thumbnails after photos become unreadable', async ({ page }) 
 
 test.describe('on a tablet', () => {
   test.use({ viewport: { width: 820, height: 1180 } })
+  test('fits every post control inside the post', async ({ page }) => {
+    const state = {
+      app: 'tgprep',
+      version: 1,
+      categories: [{ id: 'friends', name: 'Друзьям', color: '#3390ec' }],
+      posts: [{ id: 'p1', category: 'friends', items: ['a.jpg', 'b.jpg'], caption: '', sent: false }],
+      photos: {},
+    }
+    await openFolder(page, images(2), state)
+    const view = postsView(page, 0)
+    const post = (await posts(view).first().boundingBox())!
+    for (const name of ['Mark as sent', 'Save as files', 'Delete post']) {
+      const button = (await posts(view).first().getByRole('button', { name }).boundingBox())!
+      expect(button.x + button.width).toBeLessThanOrEqual(post.x + post.width)
+    }
+    expect(await view.evaluate((scroller) => scroller.scrollWidth - scroller.clientWidth)).toBe(0)
+  })
+
 
   test('pressing and dragging a photo over text selects none of it', async ({ page }) => {
     const state = {
