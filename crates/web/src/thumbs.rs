@@ -21,6 +21,7 @@ const SHORT_TO_LONG_SIDE: f64 = 1.5;
 const THUMB_SIDE_STEP: f64 = 256.0;
 const EDITED_DELAY_MS: i32 = 250;
 const EDITED_QUALITY: f64 = 0.85;
+const AHEAD_JOBS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Thumb {
@@ -35,6 +36,13 @@ pub struct DisplayThumb {
     pub edited: bool,
 }
 
+struct Running {
+    id: PhotoId,
+    worker: Worker,
+    generation: u32,
+    priority: Priority,
+}
+
 #[derive(Default)]
 struct Pool {
     idle: Vec<Worker>,
@@ -42,12 +50,27 @@ struct Pool {
     ahead: Vec<Rc<PhotoFile>>,
     ahead_rank: HashMap<PhotoId, usize>,
     promoted: HashSet<PhotoId>,
-    in_flight: HashMap<String, (PhotoId, Worker, u32)>,
+    in_flight: HashMap<String, Running>,
     requested: HashSet<PhotoId>,
     generation: u32,
 }
 
 impl Pool {
+    fn next(&mut self) -> Option<(Rc<PhotoFile>, Priority)> {
+        if let Some(file) = self.queue.pop() {
+            return Some((file, Priority::Shown));
+        }
+        let reading_ahead = self
+            .in_flight
+            .values()
+            .filter(|running| running.priority == Priority::Ahead)
+            .count();
+        if reading_ahead >= AHEAD_JOBS || store().viewer.with_untracked(Option::is_some) {
+            return None;
+        }
+        Some((self.nearest_ahead()?, Priority::Ahead))
+    }
+
     fn nearest_ahead(&mut self) -> Option<Rc<PhotoFile>> {
         let position = self
             .ahead
@@ -193,13 +216,18 @@ fn pump() {
             if pool.idle.is_empty() {
                 return None;
             }
-            let file = pool.queue.pop().or_else(|| pool.nearest_ahead())?;
+            let (file, priority) = pool.next()?;
             let worker = pool.idle.pop()?;
             let long_side = thumb_long_side();
             let key = cache_key(&file, long_side);
             pool.in_flight.insert(
                 key.clone(),
-                (file.id.clone(), worker.clone(), pool.generation),
+                Running {
+                    id: file.id.clone(),
+                    worker: worker.clone(),
+                    generation: pool.generation,
+                    priority,
+                },
             );
             Some((file, worker, key, long_side))
         });
@@ -236,9 +264,9 @@ fn received(worker: &Worker, response: Response) {
         Response::Ready => POOL.with_borrow_mut(|pool| pool.idle.push(worker.clone())),
         Response::Thumb { key, thumbnail } => {
             let finished = POOL.with_borrow_mut(|pool| {
-                let (id, worker, generation) = pool.in_flight.remove(&key)?;
-                pool.idle.push(worker);
-                Some((id, generation == pool.generation))
+                let running = pool.in_flight.remove(&key)?;
+                pool.idle.push(running.worker);
+                Some((running.id, running.generation == pool.generation))
             });
             if let Some((id, true)) = finished {
                 store_thumb(id, thumbnail.as_ref());
@@ -257,6 +285,15 @@ fn received(worker: &Worker, response: Response) {
     pump();
 }
 
+pub fn resume_read_ahead_after_viewer() {
+    let viewer = store().viewer;
+    Effect::new(move |_| {
+        if viewer.with(Option::is_none) {
+            pump();
+        }
+    });
+}
+
 pub fn start_workers() {
     let available = window().navigator().hardware_concurrency() - 1.0;
     let count = available.clamp(1.0, 4.0);
@@ -267,7 +304,7 @@ pub fn start_workers() {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Priority {
     Shown,
     Ahead,

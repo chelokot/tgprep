@@ -71,3 +71,18 @@ export const savedState = (page: Page) =>
       photos: Record<string, { category: string | null; edits: { quarter: number } }>
     }
   })
+
+export const cachedThumbs = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        const open = indexedDB.open('tgprep-thumbs')
+        open.onsuccess = () => {
+          const count = open.result.transaction('thumbs').objectStore('thumbs').count()
+          count.onsuccess = () => {
+            resolve(count.result)
+            open.result.close()
+          }
+        }
+      }),
+  )

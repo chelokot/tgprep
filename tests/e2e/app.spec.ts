@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { drag, images, library, libraryTile, openFolder, pointIn, posts, postsView, savedState } from './fixtures'
+import { cachedThumbs, drag, images, library, libraryTile, openFolder, pointIn, posts, postsView, savedState } from './fixtures'
 
 test('composes posts by dragging, undoes and persists them', async ({ page }) => {
   await openFolder(page, images(4))
@@ -174,23 +174,23 @@ test.describe('on a high density screen', () => {
 test('prepares thumbnails of the photos below the screen before scrolling', async ({ page }) => {
   const files = images(80)
   await openFolder(page, files, null, null)
-  const cached = () =>
-    page.evaluate(
-      () =>
-        new Promise<number>((resolve) => {
-          const open = indexedDB.open('tgprep-thumbs')
-          open.onsuccess = () => {
-            const count = open.result.transaction('thumbs').objectStore('thumbs').count()
-            count.onsuccess = () => {
-              resolve(count.result)
-              open.result.close()
-            }
-          }
-        }),
-    )
   await expect(library(page).locator('[data-photo] img').first()).toBeVisible()
-  await expect.poll(cached, { timeout: 20_000 }).toBe(files.length)
+  await expect.poll(() => cachedThumbs(page), { timeout: 20_000 }).toBe(files.length)
   expect(await library(page).locator('[data-photo]').count()).toBeLessThan(files.length)
+})
+
+test('waits with thumbnails below the screen while the viewer is open', async ({ page }) => {
+  const files = images(80)
+  await openFolder(page, files, null, null)
+  await library(page).locator('[data-photo]').first().click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.waitForTimeout(1000)
+  const settled = await cachedThumbs(page)
+  await page.waitForTimeout(1000)
+  expect(await cachedThumbs(page)).toBe(settled)
+  expect(settled).toBeLessThan(files.length)
+  await page.keyboard.press('Escape')
+  await expect.poll(() => cachedThumbs(page), { timeout: 20_000 }).toBe(files.length)
 })
 
 test('keeps making thumbnails after photos become unreadable', async ({ page }) => {
