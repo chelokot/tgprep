@@ -30,10 +30,10 @@ Server environment:
 | `TGPREP_CLIENT_DIR` | the built `dist` directory, read once at start (restart after a rebuild) |
 | `TGPREP_TLS_CERT`, `TGPREP_TLS_KEY` | PEM certificate chain and private key; with both set the server speaks HTTPS, without them plain HTTP |
 
-The release binary is copied to `~/.cache/tgprep-release/tgprep-server` (built at the commit that added this line, together with `dist`). Run it with `dist` next to it:
+The release build of the commit that added this line is in `~/.cache/tgprep-release`: the server binary `tgprep-server` and the `dist` it serves.
 
 ```
-TGPREP_LISTEN=0.0.0.0:443 TGPREP_CLIENT_DIR=/path/to/dist TGPREP_TLS_CERT=cert.pem TGPREP_TLS_KEY=key.pem ~/.cache/tgprep-release/tgprep-server
+TGPREP_LISTEN=0.0.0.0:443 TGPREP_CLIENT_DIR=$HOME/.cache/tgprep-release/dist TGPREP_TLS_CERT=cert.pem TGPREP_TLS_KEY=key.pem ~/.cache/tgprep-release/tgprep-server
 ```
 
 Profiling the wasm with function names: build with `CARGO_PROFILE_WEB_STRIP=none crates/web/build.sh`, then replace `dist/assets/tgprep_bg-*.wasm` with `wasm-bindgen --target web --no-typescript --keep-debug` output of `$CARGO_TARGET_DIR/wasm32-unknown-unknown/web/tgprep-web.wasm` (no `wasm-opt`); the JS glue is identical.
