@@ -6,7 +6,7 @@ export default defineConfig({
   timeout: 120_000,
   workers: 1,
   use: {
-    baseURL: process.env.TGPREP_URL ?? 'http://localhost:5179',
+    baseURL: process.env.TGPREP_URL ?? 'http://127.0.0.1:5179',
     ...devices['Desktop Chrome'],
     viewport: { width: 1600, height: 1000 },
     permissions: ['clipboard-read', 'clipboard-write'],

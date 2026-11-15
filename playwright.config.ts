@@ -7,7 +7,7 @@ export default defineConfig({
   fullyParallel: true,
   reporter: 'list',
   use: {
-    baseURL: url ?? 'http://localhost:5179',
+    baseURL: url ?? 'http://127.0.0.1:5179',
     ...devices['Desktop Chrome'],
     viewport: { width: 1600, height: 1000 },
     permissions: ['clipboard-read', 'clipboard-write'],
@@ -16,8 +16,10 @@ export default defineConfig({
   webServer: url
     ? undefined
     : {
-        command: 'node node_modules/vite/bin/vite.js --port 5179 --strictPort',
-        url: 'http://localhost:5179',
+        command: 'cargo run --release -p tgprep-server',
+        env: { TGPREP_LISTEN: '127.0.0.1:5179', TGPREP_CLIENT_DIR: 'dist' },
+        url: 'http://127.0.0.1:5179',
         reuseExistingServer: true,
+        timeout: 600_000,
       },
 })
