@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { drag, library, libraryTile, pointIn, posts, postsView } from '../e2e/fixtures'
 
@@ -107,24 +107,63 @@ for (const viewport of viewports) {
       await check('opened')
 
       await page.getByRole('button', { name: 'In posts' }).click()
-      for (let post = 0; post < photoCount / postSize; post++) {
+      const view = postsView(page, 0)
+      const select = async (first: number, count: number) => {
         await library(page).evaluate((scroller) => (scroller.scrollTop = 0))
-        await libraryTile(page, photoName(post * postSize)).click({ modifiers: ['ControlOrMeta'] })
-        const last = libraryTile(page, photoName(post * postSize + postSize - 1))
+        await libraryTile(page, photoName(first)).click({ modifiers: ['ControlOrMeta'] })
+        const last = libraryTile(page, photoName(first + count - 1))
         while ((await last.count()) === 0) await library(page).evaluate((scroller) => (scroller.scrollTop += scroller.clientHeight / 2))
         await last.scrollIntoViewIfNeeded()
         await last.click({ modifiers: ['Shift'] })
-        await expect(page.getByText(`${postSize} selected`)).toBeVisible()
+        await expect(page.getByText(`${count} selected`)).toBeVisible()
+        return last
+      }
+      const items = (post: number) => posts(view).nth(post).locator('[data-photo]').evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute('data-photo')))
+      const names = (first: number, count: number) => Array.from({ length: count }, (_, index) => photoName(first + index))
+      const centered = async (target: Locator, fx: number, fy: number) => {
+        await target.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+        return pointIn(target, fx, fy)
+      }
+      const between = (upper: number) =>
+        view.evaluate((scroller, upper) => {
+          const cards = scroller.querySelectorAll('[data-post-index]')
+          const gap = () => (cards[upper].getBoundingClientRect().bottom + cards[upper + 1].getBoundingClientRect().top) / 2
+          const pane = scroller.getBoundingClientRect()
+          scroller.scrollTop += gap() - (pane.top + pane.height / 2)
+          return { x: pane.left + pane.width / 2, y: gap() }
+        }, upper)
+
+      await drag(page, libraryTile(page, photoName(0)), await pointIn(view, 0.5, 0.3))
+      for (let index = 1; index < postSize; index++) {
+        const target = await centered(posts(view).first().locator('[data-photo]').last(), 0.85, 0.5)
+        await drag(page, libraryTile(page, photoName(index)), target, index === postSize - 1 ? () => check('drag-into-post') : undefined)
+      }
+      expect(await items(0)).toEqual(names(0, postSize))
+      await check('first-post')
+
+      await select(postSize, postSize)
+      const below = await pointIn(posts(view).first(), 0.5, 1)
+      await drag(page, libraryTile(page, photoName(2 * postSize - 1)), { x: below.x, y: below.y + 40 }, () => check('drag-selection'))
+      await expect(page.getByText(`${postSize} selected`)).toHaveCount(0)
+      expect(await items(1)).toEqual(names(postSize, postSize))
+
+      await library(page).evaluate((scroller) => (scroller.scrollTop = 0))
+      await drag(page, libraryTile(page, photoName(2 * postSize)), await between(0), () => check('drag-between-posts'))
+      await expect(posts(view)).toHaveCount(3)
+      const dropped = await select(2 * postSize + 1, postSize - 1)
+      await drag(page, dropped, await centered(posts(view).nth(1).locator('[data-photo]').first(), 0.15, 0.5))
+      expect(await items(1)).toEqual([...names(2 * postSize + 1, postSize - 1), photoName(2 * postSize)])
+
+      for (let post = 3; post < photoCount / postSize; post++) {
+        await select(post * postSize, postSize)
         await page.getByRole('button', { name: 'New post from selection' }).click()
         await expect(page.getByText(`${postSize} selected`)).toHaveCount(0)
-        if (post === 0) await check('first-post')
       }
       await expect(library(page).locator('[data-photo]')).toHaveCount(0)
       await page.getByRole('button', { name: 'In posts' }).click()
       await expect(page.getByText(`30 posts · ${photoCount} of ${photoCount} photos used`)).toBeAttached()
       await check('placed')
 
-      const view = postsView(page, 0)
       const captions = view.getByPlaceholder('Caption…')
       for (let index = 0; index < 3; index++) {
         await captions.nth(index).fill(`Day ${index + 1}: ${'a long walk along the river and dinner with friends '.repeat(index + 1)}`)
