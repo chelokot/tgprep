@@ -85,6 +85,30 @@ test('viewer navigates, archives to the next photo and highlights the last one o
   await expect(libraryTile(page, 'c.jpg')).toHaveClass(/animate-glow/)
 })
 
+test('crop handles stay clear of the photo navigation buttons', async ({ page }) => {
+  await openFolder(page, images(3, 1500, 1000))
+  await libraryTile(page, 'b.jpg').click()
+  const dialog = page.getByRole('dialog')
+  if ((await dialog.getByRole('slider', { name: 'Straighten' }).count()) === 0) await page.keyboard.press('e')
+  await dialog.getByRole('button', { name: 'Crop and rotate (R)' }).click()
+  await expect(dialog.locator('canvas')).toBeVisible()
+  for (const viewport of [
+    { width: 820, height: 1180 },
+    { width: 1366, height: 768 },
+    { width: 1600, height: 1000 },
+  ]) {
+    await page.setViewportSize(viewport)
+    const overlaps = await dialog.evaluate(async (dialog) => {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const handles = [...dialog.querySelectorAll<HTMLElement>('[style*="resize"]')].map((handle) => handle.getBoundingClientRect())
+      const buttons = ['Previous', 'Next'].map((label) => dialog.querySelector(`[aria-label^="${label}"]`)!.getBoundingClientRect())
+      const apart = (a: DOMRect, b: DOMRect) => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top
+      return { handles: handles.length, overlapping: buttons.flatMap((button) => handles.filter((handle) => !apart(button, handle))).length }
+    })
+    expect(overlaps, `${viewport.width}×${viewport.height}`).toEqual({ handles: 8, overlapping: 0 })
+  }
+})
+
 test('moving to the next photo with a slider focused leaves the next photo unedited', async ({ page }) => {
   await openFolder(page, images(3))
   await libraryTile(page, 'a.jpg').click()

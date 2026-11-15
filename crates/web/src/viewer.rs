@@ -350,7 +350,7 @@ fn Stage(
     });
     let loaded = move || bitmap.with(Option::is_some);
     view! {
-        <div node_ref=container class=move || if cropping.get() { "relative min-h-0 min-w-0 flex-1 m-10" } else { "relative min-h-0 min-w-0 flex-1 m-4" }>
+        <div node_ref=container class=move || if cropping.get() { "relative min-h-0 min-w-0 flex-1 mx-18 my-10" } else { "relative min-h-0 min-w-0 flex-1 m-4" }>
             <div class="absolute top-1/2 left-1/2 -translate-1/2" style=move || format!("width: {}px; height: {}px;", display.get().w, display.get().h)>
                 {move || {
                     (!loaded())
@@ -910,40 +910,36 @@ fn ViewerScreen() -> impl IntoView {
                 </button>
                 <IconButton tone=Tone::Overlay icon=icons::SLIDERS_HORIZONTAL label=t().edit_panel active=editing on_click=move |()| set_editing(!editing.get_untracked()) />
             </header>
-            <div class="relative flex min-h-0 flex-1">
-                <button
-                    type="button"
-                    aria-label=t().previous
-                    title=t().previous
-                    disabled=move || position.get().0 == 0
-                    on:click=move |_| go(-1)
-                    class="absolute top-1/2 left-3 z-10 grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white/20 disabled:opacity-0"
-                >
-                    {svg(icons::CHEVRON_LEFT, "size-6")}
-                </button>
-                {move || {
-                    let id = id.get();
-                    match (photo_file(&id), size.get()) {
-                        (Some(file), Some(size)) => view! { <Stage id=id file=file size=size cropping=cropping_shown comparing=comparing /> }.into_any(),
-                        _ => view! { <div class="grid flex-1 place-items-center text-sm text-white/50">{t().loading}</div> }.into_any(),
-                    }
-                }}
-                <button
-                    type="button"
-                    aria-label=t().next
-                    title=t().next
-                    disabled=move || { position.get().0 + 1 >= position.get().1 }
-                    on:click=move |_| go(1)
-                    class=move || {
-                        if editing.get() {
-                            "absolute top-1/2 z-10 grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white/20 disabled:opacity-0 right-[21.75rem]"
-                        } else {
-                            "absolute top-1/2 z-10 grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white/20 disabled:opacity-0 right-3"
+            <div class="flex min-h-0 flex-1">
+                <div class="relative flex min-h-0 min-w-0 flex-1">
+                    <button
+                        type="button"
+                        aria-label=t().previous
+                        title=t().previous
+                        disabled=move || position.get().0 == 0
+                        on:click=move |_| go(-1)
+                        class="absolute top-1/2 left-3 z-10 grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white/20 disabled:opacity-0"
+                    >
+                        {svg(icons::CHEVRON_LEFT, "size-6")}
+                    </button>
+                    {move || {
+                        let id = id.get();
+                        match (photo_file(&id), size.get()) {
+                            (Some(file), Some(size)) => view! { <Stage id=id file=file size=size cropping=cropping_shown comparing=comparing /> }.into_any(),
+                            _ => view! { <div class="grid flex-1 place-items-center text-sm text-white/50">{t().loading}</div> }.into_any(),
                         }
-                    }
-                >
-                    {svg(icons::CHEVRON_RIGHT, "size-6")}
-                </button>
+                    }}
+                    <button
+                        type="button"
+                        aria-label=t().next
+                        title=t().next
+                        disabled=move || { position.get().0 + 1 >= position.get().1 }
+                        on:click=move |_| go(1)
+                        class="absolute top-1/2 right-3 z-10 grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white/20 disabled:opacity-0"
+                    >
+                        {svg(icons::CHEVRON_RIGHT, "size-6")}
+                    </button>
+                </div>
                 {move || {
                     let id = id.get();
                     match (editing.get(), size.get()) {

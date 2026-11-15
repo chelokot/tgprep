@@ -44,13 +44,15 @@ export const postsView = (page: Page, index: 0 | 1) => page.locator('[data-drop=
 export const libraryTile = (page: Page, name: string) => library(page).locator(`[data-photo="${name}"]`)
 export const posts = (view: Locator) => view.locator('[data-post-index]')
 
-export const drag = async (page: Page, from: Locator, to: { x: number; y: number }) => {
+export const drag = async (page: Page, from: Locator, to: { x: number; y: number }, beforeDrop = async () => {}) => {
+  await from.scrollIntoViewIfNeeded()
   const box = (await from.boundingBox())!
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   await page.mouse.down()
   await page.mouse.move(box.x + box.width / 2 + 10, box.y + box.height / 2 + 10, { steps: 3 })
   await page.mouse.move(to.x, to.y, { steps: 12 })
   await page.waitForTimeout(80)
+  await beforeDrop()
   await page.mouse.up()
 }
 
