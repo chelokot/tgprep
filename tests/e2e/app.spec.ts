@@ -108,6 +108,17 @@ test('edits are stored as settings and shown in thumbnails', async ({ page }) =>
   await expect.poll(async () => (await tile.boundingBox())!.width > (await tile.boundingBox())!.height * 1.8).toBe(true)
 })
 
+test('keeps showing a photo while its edited thumbnail renders', async ({ page }) => {
+  await openFolder(page, images(1))
+  const image = libraryTile(page, 'a.jpg').locator('img')
+  const original = (await image.getAttribute('src'))!
+  await libraryTile(page, 'a.jpg').click()
+  await page.keyboard.press('e')
+  await page.getByRole('button', { name: 'Rotate right' }).click()
+  expect(await page.evaluate(() => [...document.querySelectorAll('[data-photo]')].map((tile) => tile.querySelector('img')?.getAttribute('src') ?? 'placeholder'))).not.toContain('placeholder')
+  await expect(image).not.toHaveAttribute('src', original)
+})
+
 test('send mode copies the rendered photo and the caption', async ({ page }) => {
   await openFolder(page, images(1, 400, 200))
   const view = postsView(page, 0)

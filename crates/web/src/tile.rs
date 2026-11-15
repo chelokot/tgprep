@@ -117,10 +117,10 @@ pub fn tile(
                 Some(DisplayThumb { url: Some(url), .. }) => {
                     view! { <img src=url alt="" draggable="false" decoding="async" class=image_class /> }.into_any()
                 }
-                Some(DisplayThumb { failed: true, .. }) => {
+                Some(DisplayThumb { url: None, .. }) => {
                     view! { <div class="grid size-full place-items-center text-faint ">{svg(icons::IMAGE_OFF, "size-5")}</div> }.into_any()
                 }
-                _ => view! { <div class="grid size-full place-items-center text-faint animate-pulse"></div> }.into_any(),
+                None => view! { <div class="grid size-full place-items-center text-faint animate-pulse"></div> }.into_any(),
             }}
             {move || {
                 thumb.get().is_some_and(|thumb| thumb.edited).then(|| {

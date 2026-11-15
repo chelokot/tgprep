@@ -33,7 +33,6 @@ pub struct DisplayThumb {
     pub url: Option<String>,
     pub aspect: f64,
     pub edited: bool,
-    pub failed: bool,
 }
 
 #[derive(Default)]
@@ -503,16 +502,18 @@ pub fn display_thumb(id: PhotoId) -> Memo<Option<DisplayThumb>> {
                 url: None,
                 aspect: 1.0,
                 edited,
-                failed: true,
             }),
             Thumb::Ready { url, size } => {
                 let output = output_size(size, &edits);
-                let url = if edited { rendered.get() } else { Some(url) };
+                let url = if edited {
+                    rendered.get().unwrap_or(url)
+                } else {
+                    url
+                };
                 Some(DisplayThumb {
-                    url,
+                    url: Some(url),
                     aspect: output.w / output.h,
                     edited,
-                    failed: false,
                 })
             }
         }
