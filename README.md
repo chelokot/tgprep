@@ -67,7 +67,7 @@ Everything is Rust:
 | `crates/worker` | a Web Worker in WebAssembly that decodes photos and renders thumbnails off the main thread with the browser's own decoders |
 | `crates/server` | an axum server that serves `dist` from memory, compressed, with immutable caching for hashed assets |
 
-Prepost started as a TypeScript and React app and was ported to Rust with the same look and behaviour. Old `.tgprep.json` files are read and rewritten byte for byte, the Playwright suite written for the TypeScript app passes on both, and side-by-side screenshots match. On 300 photos of 6000×4000 px the Rust version shows the first thumbnails of a new folder about 3× sooner. The other interactions are on par, except that the WebAssembly bundle makes the very first visit over a slow connection slower. The measurements and how they were taken are in [docs/parity.md](docs/parity.md).
+Prepost started as a TypeScript and React app and was ported to Rust with the same look and behaviour. Old `.tgprep.json` files are read and rewritten byte for byte, the Playwright suite written for the TypeScript app passes on both, and side-by-side screenshots match. On 300 photos of 6000×4000 px the Rust version shows the first thumbnails of a new folder about 3× sooner. Scrolling, dragging, editing and the viewer are within a few milliseconds of the original, copying in send mode is a few tens of milliseconds behind, and the larger WebAssembly bundle makes the very first visit over a slow connection about 140 ms slower. The measurements and how they were taken are in [docs/parity.md](docs/parity.md).
 
 ```sh
 cargo test --workspace               # model, worker and server
