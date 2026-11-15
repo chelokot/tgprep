@@ -1,11 +1,10 @@
-use crate::browser::{Frame, error_message, settle, write_text};
+use crate::browser::{Frame, error_message, new_id, settle, write_text};
 use crate::dnd::{DragPayload, press_to_drag};
 use crate::export::{copy_photo, export_post, prepare_png};
 use crate::i18n::{fill, t};
 use crate::icons::{self, svg};
 use crate::store::{
-    CategoryFilter, Mode, PostsView, ViewKey, commit, commit_keyed, new_id, open_viewer, store,
-    toast,
+    CategoryFilter, Mode, PostsView, ViewKey, commit, commit_keyed, open_viewer, store, toast,
 };
 use crate::thumbs::display_thumb;
 use crate::tile::{CornerButton, Fit, TileProps, tile};

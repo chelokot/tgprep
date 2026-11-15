@@ -7,6 +7,9 @@ use web_sys::{Document, FileSystemDirectoryHandle, FileSystemHandle, Window};
 
 #[wasm_bindgen]
 extern "C" {
+    #[wasm_bindgen(js_namespace = crypto, js_name = randomUUID)]
+    pub fn new_id() -> String;
+
     #[wasm_bindgen(catch, js_namespace = window, js_name = showDirectoryPicker)]
     fn show_directory_picker(options: &JsValue) -> Result<Promise, JsValue>;
 

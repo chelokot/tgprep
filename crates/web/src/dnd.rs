@@ -1,6 +1,6 @@
-use crate::browser::{Listener, document, now, window};
+use crate::browser::{Listener, document, new_id, now, window};
 use crate::i18n::t;
-use crate::store::{CategoryFilter, clear_selection, commit, new_id, store};
+use crate::store::{CategoryFilter, clear_selection, commit, store};
 use crate::thumbs::thumb_url;
 use leptos::prelude::*;
 use std::cell::RefCell;

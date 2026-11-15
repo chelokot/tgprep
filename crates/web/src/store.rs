@@ -289,12 +289,6 @@ fn nonce() -> u64 {
     })
 }
 
-pub fn new_id() -> String {
-    window()
-        .crypto()
-        .map_or_else(|_| now().to_string(), |crypto| crypto.random_uuid())
-}
-
 pub fn commit(recipe: impl FnOnce(&mut Doc)) {
     commit_keyed(None, recipe);
 }

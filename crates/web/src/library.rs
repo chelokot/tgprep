@@ -1,9 +1,9 @@
-use crate::browser::rem_px;
+use crate::browser::{new_id, rem_px};
 use crate::dnd::{ClickModifiers, DragPayload, press_to_drag};
 use crate::i18n::{fill, t};
 use crate::icons::{self, stroked, svg};
 use crate::store::{
-    CategoryFilter, LibraryLayout, LibrarySort, Settings, ViewKey, clear_selection, commit, new_id,
+    CategoryFilter, LibraryLayout, LibrarySort, Settings, ViewKey, clear_selection, commit,
     open_viewer, reveal_photo, store,
 };
 use crate::thumbs::display_thumb;
