@@ -561,7 +561,7 @@ pub fn PostsPane(view: PostsView) -> impl IntoView {
                                 let watched = watched.clone();
                                 let target = element.clone();
                                 let watch = ResizeWatch::new(&element, move |_| {
-                                    let height = target.get_bounding_client_rect().height();
+                                    let height = target.get_bounding_client_rect().height().round();
                                     let previous = sizes.with_untracked(|sizes| sizes.get(&watched).copied()).unwrap_or(ESTIMATED_CARD_PX);
                                     if (previous - height).abs() < 0.5 {
                                         return;

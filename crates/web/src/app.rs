@@ -10,6 +10,7 @@ use crate::ui::{Choice, IconButton, Label, Segmented, Toasts};
 use crate::viewer::ViewerLayer;
 use crate::welcome::Welcome;
 use leptos::html::Div;
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 use web_sys::{KeyboardEvent, PointerEvent};
@@ -146,8 +147,12 @@ fn Workspace() -> impl IntoView {
                     <Library />
                 </div>
             </div>
-            <ViewerLayer />
-            <DragOverlay />
+            <Portal>
+                <DragOverlay />
+            </Portal>
+            <Portal>
+                <ViewerLayer />
+            </Portal>
             <Toasts />
         </div>
     }

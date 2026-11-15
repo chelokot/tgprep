@@ -34,8 +34,8 @@ fn handles() -> KeyValueStore {
 }
 
 pub async fn load_recent_folders() -> Vec<RecentFolder> {
-    let Ok(stored) = handles().get("recent").await else { return Vec::new() };
-    Array::from(&stored)
+    let Ok(stored) = handles().get("recent").await.and_then(JsCast::dyn_into::<Array>) else { return Vec::new() };
+    stored
         .iter()
         .filter_map(|entry| {
             let name = Reflect::get(&entry, &JsValue::from_str("name")).ok()?.as_string()?;

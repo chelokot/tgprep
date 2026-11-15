@@ -706,7 +706,7 @@ fn ViewerScreen() -> impl IntoView {
                     type="button"
                     aria-label=t().next
                     title=t().next
-                    disabled=move || position.get().0 + 1 >= position.get().1
+                    disabled=move || { position.get().0 + 1 >= position.get().1 }
                     on:click=move |_| go(1)
                     class=move || {
                         if editing.get() {
