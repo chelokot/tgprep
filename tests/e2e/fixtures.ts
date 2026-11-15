@@ -10,9 +10,9 @@ export const images = (count: number, width = 400, height = 300): TestImage[] =>
     color: `hsl(${index * 70}, 70%, 45%)`,
   }))
 
-export const openFolder = async (page: Page, files: TestImage[]) => {
+export const openFolder = async (page: Page, files: TestImage[], state: unknown = null, thumbs = files.length) => {
   await page.goto('/')
-  await page.evaluate(async (files) => {
+  await page.evaluate(async ([files, state]) => {
     const root = await navigator.storage.getDirectory()
     for await (const name of root.keys()) await root.removeEntry(name, { recursive: true })
     const folder = await root.getDirectoryHandle('photos', { create: true })
@@ -28,10 +28,15 @@ export const openFolder = async (page: Page, files: TestImage[]) => {
       await writable.write(await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 }))
       await writable.close()
     }
+    if (state !== null) {
+      const writable = await (await folder.getFileHandle('.tgprep.json', { create: true })).createWritable()
+      await writable.write(JSON.stringify(state))
+      await writable.close()
+    }
     window.showDirectoryPicker = async () => folder
-  }, files)
+  }, [files, state] as const)
   await page.getByRole('button', { name: 'Open folder' }).click()
-  await expect(library(page).locator('[data-photo] img')).toHaveCount(files.length)
+  await expect(library(page).locator('[data-photo] img')).toHaveCount(thumbs)
 }
 
 export const library = (page: Page) => page.locator('[data-drop="library"]')
